@@ -5,7 +5,6 @@ export const state = {
     analytics: null,
     userId: 'loading',
     isAuthReady: false,
-    isDemoMode: false,
     currentUserRole: null,
     isLoggedIn: false,
     serviceJobs: [],

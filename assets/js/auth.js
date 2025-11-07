@@ -22,7 +22,6 @@ export function postLoginSetup(username, role) {
   state.isLoggedIn = true;
   state.currentUserRole = role;
   state.userId = username;
-  state.isAuthReady = true;
 
   // Interface
   document.getElementById('login-container').classList.add('hidden');

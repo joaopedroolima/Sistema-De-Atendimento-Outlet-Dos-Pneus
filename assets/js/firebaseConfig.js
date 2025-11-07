@@ -12,7 +12,8 @@ import {
   doc,
   onSnapshot,
   query,
-  orderBy
+  orderBy,
+  where
 } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { state } from "./appState.js";
 
@@ -83,5 +84,6 @@ export {
   doc,
   onSnapshot,
   query,
-  orderBy
+  orderBy,
+  where
 };

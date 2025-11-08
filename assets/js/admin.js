@@ -36,11 +36,25 @@ function setupUserListener() {
     if (!db) return;
     const q = query(collection(db, ...USERS_COLLECTION_PATH));
     onSnapshot(q, (snapshot) => {
-        state.users = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        // Otimização: Usar docChanges() para processar apenas as alterações.
+        snapshot.docChanges().forEach((change) => {
+            const user = { id: change.doc.id, ...change.doc.data() };
+            const index = state.users.findIndex(u => u.id === user.id);
+
+            if (change.type === "added") {
+                if (index === -1) state.users.push(user);
+            }
+            if (change.type === "modified") {
+                if (index !== -1) state.users[index] = user;
+            }
+            if (change.type === "removed") {
+                if (index !== -1) state.users.splice(index, 1);
+            }
+        });
+
         // Sincroniza a lista de mecânicos no estado global
         state.MECHANICS = state.users.filter(u => u.role === 'mecanico').map(u => u.username);
         renderUserList(state.users);
-        // Atualiza a lista de mecânicos no formulário de serviço
         renderMechanicsManagement();
         renderSalespersonDropdowns();
     }, (error) => {

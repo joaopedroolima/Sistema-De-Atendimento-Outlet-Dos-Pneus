@@ -177,6 +177,9 @@ function renderMechanicView(jobs, groupedJobs) {
     const mechanicViewContainer = document.getElementById('mechanic-view');
     if (!mechanicViewContainer) return;
 
+    // CORREÇÃO: Limpa o container antes de renderizar para evitar duplicatas.
+    mechanicViewContainer.innerHTML = '';
+
     const myName = state.userId;
     const myJobs = groupedJobs[myName] || [];
 
@@ -392,12 +395,17 @@ export function renderReadyJobs(serviceJobs, alignmentQueue) {
 }
 
 export function calculateAndRenderDailyStats() {
-    const allFinalizedJobs = [
-        ...state.serviceJobs.filter(j => j.status === 'Finalizado'),
-        ...state.alignmentQueue.filter(a => a.status === 'Finalizado')
-    ];
+    // Filtra apenas os jobs finalizados hoje
+    const finalizedServicesToday = state.serviceJobs.filter(j => j.status === 'Finalizado' && getTimestampSeconds(j.finalizedAt) > 0);
+    const finalizedAlignmentsToday = state.alignmentQueue.filter(a => a.status === 'Finalizado' && getTimestampSeconds(a.finalizedAt) > 0);
 
-    const uniquePlates = new Set(allFinalizedJobs.map(job => job.licensePlate).filter(Boolean));
+    // CORREÇÃO LÓGICA: Contar carros únicos (por placa) para o total do dia.
+    // Isso evita contar o mesmo carro duas vezes se ele fez serviço geral e alinhamento.
+    const allFinalizedPlates = [
+        ...finalizedServicesToday.map(j => j.licensePlate),
+        ...finalizedAlignmentsToday.map(a => a.licensePlate)
+    ];
+    const uniquePlates = new Set(allFinalizedPlates.filter(Boolean));
     const totalToday = uniquePlates.size;
 
     const alignmentCount = state.alignmentQueue.filter(a => a.status === 'Finalizado').length;

@@ -63,9 +63,29 @@ export function setupRealtimeListeners() {
     where('status', 'in', ['Pendente', 'Pronto para Pagamento', 'Finalizado', 'Serviço Geral Concluído', 'Perdido'])
   );
 
+  // Otimização: Usar docChanges() para processar apenas as alterações.
   onSnapshot(serviceQuery, (snapshot) => {
-    const jobs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    state.serviceJobs = jobs.filter(j => (j.status !== 'Finalizado' && j.status !== 'Perdido') || isTimestampFromToday(j.finalizedAt));
+    snapshot.docChanges().forEach((change) => {
+      const job = { id: change.doc.id, ...change.doc.data() };
+      const index = state.serviceJobs.findIndex(j => j.id === job.id);
+      const shouldBeDisplayed = (job.status !== 'Finalizado' && job.status !== 'Perdido') || isTimestampFromToday(job.finalizedAt);
+
+      if (change.type === "added") {
+        if (shouldBeDisplayed) state.serviceJobs.push(job);
+      }
+      if (change.type === "modified") {
+        if (index !== -1) {
+          if (shouldBeDisplayed) state.serviceJobs[index] = job; // Atualiza
+          else state.serviceJobs.splice(index, 1); // Remove se não deve ser mais exibido
+        } else if (shouldBeDisplayed) {
+          state.serviceJobs.push(job); // Adiciona se apareceu (ex: status mudou para um dos que ouvimos)
+        }
+      }
+      if (change.type === "removed") {
+        if (index !== -1) state.serviceJobs.splice(index, 1);
+      }
+    });
+
     renderServiceQueues(state.serviceJobs);
     renderReadyJobs(state.serviceJobs, state.alignmentQueue);
     calculateAndRenderDailyStats();
@@ -80,9 +100,29 @@ export function setupRealtimeListeners() {
     where('status', 'in', ['Aguardando', 'Em Atendimento', 'Aguardando Serviço Geral', 'Pronto para Pagamento', 'Finalizado', 'Perdido'])
   );
 
+  // Otimização: Usar docChanges() para processar apenas as alterações.
   onSnapshot(alignmentQuery, (snapshot) => {
-    const cars = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    state.alignmentQueue = cars.filter(c => (c.status !== 'Finalizado' && c.status !== 'Perdido') || isTimestampFromToday(c.finalizedAt));
+    snapshot.docChanges().forEach((change) => {
+      const car = { id: change.doc.id, ...change.doc.data() };
+      const index = state.alignmentQueue.findIndex(c => c.id === car.id);
+      const shouldBeDisplayed = (car.status !== 'Finalizado' && car.status !== 'Perdido') || isTimestampFromToday(car.finalizedAt);
+
+      if (change.type === "added") {
+        if (shouldBeDisplayed) state.alignmentQueue.push(car);
+      }
+      if (change.type === "modified") {
+        if (index !== -1) {
+          if (shouldBeDisplayed) state.alignmentQueue[index] = car; // Atualiza
+          else state.alignmentQueue.splice(index, 1); // Remove
+        } else if (shouldBeDisplayed) {
+          state.alignmentQueue.push(car); // Adiciona
+        }
+      }
+      if (change.type === "removed") {
+        if (index !== -1) state.alignmentQueue.splice(index, 1);
+      }
+    });
+
     renderAlignmentQueue(state.alignmentQueue);
     renderAlignmentMirror(state.alignmentQueue);
     renderReadyJobs(state.serviceJobs, state.alignmentQueue);

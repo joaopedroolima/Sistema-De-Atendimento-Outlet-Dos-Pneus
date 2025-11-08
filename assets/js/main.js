@@ -96,6 +96,18 @@ async function initApp() {
         });
     });
 
+    // NOVO: Controle de Navegação por Sub-Abas (Monitor)
+    document.querySelectorAll('.monitor-sub-tab-button').forEach(button => {
+        button.addEventListener('click', () => {
+            const subTabId = button.dataset.subTab;
+            document.querySelectorAll('.monitor-sub-tab-button').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.monitor-sub-tab-content').forEach(content => content.classList.remove('active'));
+            button.classList.add('active');
+            document.getElementById(subTabId).classList.add('active');
+        });
+    });
+
+
     // Expor o estado para depuração
     window._AT_STATE = state;
 }

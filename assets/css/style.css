@@ -44,3 +44,37 @@ body {
 .aligner-hidden {
     display: none !important;
 }
+
+/* NOVO: Estilos para as sub-abas da tela de Monitor */
+.monitor-sub-tab-content {
+    display: none;
+}
+
+.monitor-sub-tab-content.active {
+    display: block;
+}
+
+.monitor-sub-tab-button {
+    padding: 0.75rem 1rem;
+    border-top-left-radius: 0.5rem;
+    border-top-right-radius: 0.5rem;
+    border-bottom-width: 2px;
+    border-color: transparent;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    font-weight: 500;
+    color: rgb(107 114 128);
+    transition: color 0.15s ease-in-out, background-color 0.15s ease-in-out;
+}
+
+.monitor-sub-tab-button:hover {
+    color: rgb(55 65 81);
+    background-color: rgb(243 244 246);
+}
+
+.monitor-sub-tab-button.active {
+    background-color: white;
+    border-color: rgb(37 99 235);
+    color: rgb(29 78 216);
+    font-weight: 600;
+}

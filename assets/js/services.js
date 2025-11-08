@@ -10,6 +10,7 @@ import {
   query,
   where,
   getDocs,
+  getDoc,
   SERVICE_COLLECTION_PATH,
   ALIGNMENT_COLLECTION_PATH,
   serverNow
@@ -22,7 +23,8 @@ import {
   renderAlignmentQueue,
   renderAlignmentMirror,
   renderReadyJobs,
-  calculateAndRenderDailyStats
+  calculateAndRenderDailyStats,
+  getTimestampSeconds
 } from './uiRender.js';
 import { MANAGER_ROLE, VENDEDOR_ROLE } from './auth.js';
 import { updateRemovalList } from './removal.js';
@@ -57,125 +59,206 @@ export function setupRealtimeListeners() {
     console.warn("⚠️ Firestore não inicializado, listeners não ativados.");
     return;
   }
+  
+  // Limpa listeners anteriores se existirem (evita múltiplos listeners)
+  if (window._serviceListener) {
+    window._serviceListener(); // Unsubscribe do listener anterior
+  }
+  if (window._alignmentListener) {
+    window._alignmentListener(); // Unsubscribe do listener anterior
+  }
+  if (window._finalizedServiceListener) {
+    window._finalizedServiceListener(); // Unsubscribe do listener anterior
+  }
+  if (window._finalizedAlignmentListener) {
+    window._finalizedAlignmentListener(); // Unsubscribe do listener anterior
+  }
 
-  const serviceQuery = query(
+  // OTIMIZAÇÃO: Query separada para serviços ativos (mais eficiente)
+  const activeServiceQuery = query(
     collection(db, ...SERVICE_COLLECTION_PATH),
-    where('status', 'in', ['Pendente', 'Pronto para Pagamento', 'Finalizado', 'Serviço Geral Concluído', 'Perdido'])
+    where('status', 'in', ['Pendente', 'Pronto para Pagamento'])
   );
 
-  // Otimização: Usar docChanges() para processar apenas as alterações.
-  onSnapshot(serviceQuery, (snapshot) => {
-    snapshot.docChanges().forEach((change) => {
-      const job = { id: change.doc.id, ...change.doc.data() };
-      const index = state.serviceJobs.findIndex(j => j.id === job.id);
-      const shouldBeDisplayed = (job.status !== 'Finalizado' && job.status !== 'Perdido') || isTimestampFromToday(job.finalizedAt);
+  // OTIMIZAÇÃO: Query para serviços finalizados (filtra por data no cliente para evitar problemas de índice)
+  // Nota: Firestore pode precisar de índice composto para queries com múltiplos where
+  // Por isso, buscamos apenas finalizados e filtramos por data no cliente
+  const finalizedServiceQuery = query(
+    collection(db, ...SERVICE_COLLECTION_PATH),
+    where('status', '==', 'Finalizado')
+  );
+  
+  // Calcula timestamp do início do dia para filtro no cliente
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const startOfTodayTimestamp = Timestamp.fromDate(startOfToday);
 
-      if (change.type === "added") {
-        if (shouldBeDisplayed) state.serviceJobs.push(job);
-      }
-      if (change.type === "modified") {
-        if (index !== -1) {
-          if (shouldBeDisplayed) state.serviceJobs[index] = job; // Atualiza
-          else state.serviceJobs.splice(index, 1); // Remove se não deve ser mais exibido
-        } else if (shouldBeDisplayed) {
-          state.serviceJobs.push(job); // Adiciona se apareceu (ex: status mudou para um dos que ouvimos)
-        }
-      }
-      if (change.type === "removed") {
-        if (index !== -1) state.serviceJobs.splice(index, 1);
-      }
+  // Listener para serviços ativos
+  window._serviceListener = onSnapshot(activeServiceQuery, (snapshot) => {
+    state.serviceJobs = [];
+    snapshot.forEach((doc) => {
+      const job = { id: doc.id, ...doc.data() };
+      state.serviceJobs.push(job);
     });
 
+    // Renderiza após mudanças
     renderServiceQueues(state.serviceJobs);
     renderReadyJobs(state.serviceJobs, state.alignmentQueue);
     calculateAndRenderDailyStats();
-    updateRemovalList(); // Atualiza a nova aba de remoção
+    updateRemovalList();
   }, (error) => {
-    console.error("Erro no listener de Serviços:", error);
+    console.error("Erro no listener de Serviços Ativos:", error);
     alertUser("Erro de conexão (Serviços): " + error.message);
   });
 
-  const alignmentQuery = query(
-    collection(db, ...ALIGNMENT_COLLECTION_PATH),
-    where('status', 'in', ['Aguardando', 'Em Atendimento', 'Aguardando Serviço Geral', 'Pronto para Pagamento', 'Finalizado', 'Perdido'])
-  );
-
-  // Otimização: Usar docChanges() para processar apenas as alterações.
-  onSnapshot(alignmentQuery, (snapshot) => {
-    snapshot.docChanges().forEach((change) => {
-      const car = { id: change.doc.id, ...change.doc.data() };
-      const index = state.alignmentQueue.findIndex(c => c.id === car.id);
-      const shouldBeDisplayed = (car.status !== 'Finalizado' && car.status !== 'Perdido') || isTimestampFromToday(car.finalizedAt);
-
-      if (change.type === "added") {
-        if (shouldBeDisplayed) state.alignmentQueue.push(car);
-      }
-      if (change.type === "modified") {
-        if (index !== -1) {
-          if (shouldBeDisplayed) state.alignmentQueue[index] = car; // Atualiza
-          else state.alignmentQueue.splice(index, 1); // Remove
-        } else if (shouldBeDisplayed) {
-          state.alignmentQueue.push(car); // Adiciona
+  // Listener separado para serviços finalizados (filtra hoje no cliente)
+  window._finalizedServiceListener = onSnapshot(finalizedServiceQuery, (snapshot) => {
+    state.finalizedToday.services = [];
+    const startOfTodaySeconds = Math.floor(startOfToday.getTime() / 1000);
+    
+    snapshot.forEach((doc) => {
+      const job = { id: doc.id, ...doc.data() };
+      // Filtra apenas os finalizados hoje usando função helper
+      if (job.finalizedAt) {
+        const finalizedSeconds = getTimestampSeconds(job.finalizedAt);
+        if (finalizedSeconds >= startOfTodaySeconds) {
+          state.finalizedToday.services.push(job);
         }
-      }
-      if (change.type === "removed") {
-        if (index !== -1) state.alignmentQueue.splice(index, 1);
       }
     });
 
+    // Atualiza estatísticas quando serviços finalizados mudam
+    calculateAndRenderDailyStats();
+  }, (error) => {
+    console.error("Erro no listener de Serviços Finalizados:", error);
+  });
+
+  // OTIMIZAÇÃO: Query separada para alinhamentos ativos
+  const activeAlignmentQuery = query(
+    collection(db, ...ALIGNMENT_COLLECTION_PATH),
+    where('status', 'in', ['Aguardando', 'Em Atendimento', 'Aguardando Serviço Geral', 'Pronto para Pagamento'])
+  );
+
+  // OTIMIZAÇÃO: Query para alinhamentos finalizados (filtra por data no cliente)
+  const finalizedAlignmentQuery = query(
+    collection(db, ...ALIGNMENT_COLLECTION_PATH),
+    where('status', '==', 'Finalizado')
+  );
+
+  // Listener para alinhamentos ativos
+  window._alignmentListener = onSnapshot(activeAlignmentQuery, (snapshot) => {
+    state.alignmentQueue = [];
+    snapshot.forEach((doc) => {
+      const car = { id: doc.id, ...doc.data() };
+      state.alignmentQueue.push(car);
+    });
+
+    // Renderiza após mudanças
     renderAlignmentQueue(state.alignmentQueue);
     renderAlignmentMirror(state.alignmentQueue);
     renderReadyJobs(state.serviceJobs, state.alignmentQueue);
     calculateAndRenderDailyStats();
-    updateRemovalList(); // Atualiza a nova aba de remoção
+    updateRemovalList();
   }, (error) => {
-    console.error("Erro no listener de Alinhamento:", error);
+    console.error("Erro no listener de Alinhamentos Ativos:", error);
     alertUser("Erro de conexão (Alinhamento): " + error.message);
   });
 
-  console.log("📡 Firestore listeners ativos (serviceJobs e alignmentQueue)");
+  // Listener separado para alinhamentos finalizados (filtra hoje no cliente)
+  window._finalizedAlignmentListener = onSnapshot(finalizedAlignmentQuery, (snapshot) => {
+    state.finalizedToday.alignments = [];
+    const startOfTodaySeconds = Math.floor(startOfToday.getTime() / 1000);
+    
+    snapshot.forEach((doc) => {
+      const car = { id: doc.id, ...doc.data() };
+      // Filtra apenas os finalizados hoje usando função helper
+      if (car.finalizedAt) {
+        const finalizedSeconds = getTimestampSeconds(car.finalizedAt);
+        if (finalizedSeconds >= startOfTodaySeconds) {
+          state.finalizedToday.alignments.push(car);
+        }
+      }
+    });
+
+    // Atualiza estatísticas quando alinhamentos finalizados mudam
+    calculateAndRenderDailyStats();
+  }, (error) => {
+    console.error("Erro no listener de Alinhamentos Finalizados:", error);
+  });
+
+  console.log("📡 Firestore listeners ativos (serviços ativos, alinhamentos ativos, finalizados hoje)");
 }
 
 /* ============================================================================
    🧾 MARCAR SERVIÇO COMO PRONTO
 ============================================================================ */
 export async function markServiceReady(docId, serviceType) { // serviceType é 'GS' ou 'TS'
-  const dataToUpdate = {};
   const serviceDocRef = doc(db, ...SERVICE_COLLECTION_PATH, docId);
 
   try {
-    // Atualiza o sub-serviço específico
-    if (serviceType === 'GS') dataToUpdate.statusGS = 'Serviço Geral Concluído';
-    if (serviceType === 'TS') dataToUpdate.statusTS = 'Serviço Pneus Concluído';
+    // 1. Busca o documento ANTES de atualizar para ter o estado completo
+    const serviceDocBefore = await getDoc(serviceDocRef);
+    if (!serviceDocBefore.exists()) throw new Error("Documento de Serviço não encontrado.");
+    const jobBefore = serviceDocBefore.data();
+
+    // 2. Atualiza o status do sub-serviço que foi concluído (GS ou TS).
+    const dataToUpdate = {};
+    if (serviceType === 'GS') {
+      dataToUpdate.statusGS = 'Serviço Geral Concluído';
+    }
+    if (serviceType === 'TS') {
+      dataToUpdate.statusTS = 'Serviço Pneus Concluído';
+    }
+    
     await updateDoc(serviceDocRef, dataToUpdate);
 
-    // Pega o documento atualizado para verificar se ambos estão prontos
+    // 3. Busca o documento ATUALIZADO diretamente do banco de dados para garantir integridade.
     const serviceDoc = await getDoc(serviceDocRef);
-    if (!serviceDoc.exists()) throw new Error("Documento de Serviço não encontrado.");
-
+    if (!serviceDoc.exists()) throw new Error("Documento de Serviço não encontrado após atualização.");
     const job = serviceDoc.data();
-    const isGsReady = job.statusGS === 'Serviço Geral Concluído' || job.statusGS === null; // Se não há GS, está pronto.
-    const isTsReady = job.statusTS === 'Serviço Pneus Concluído' || job.statusTS === null;
+
+    // 4. Verifica se AMBOS os serviços (Geral e Pneus) estão concluídos ou não eram necessários.
+    // Um serviço não é necessário se statusGS ou statusTS for null (não foi atribuído)
+    const isGsReady = job.statusGS === 'Serviço Geral Concluído' || job.statusGS === null || job.statusGS === undefined;
+    const isTsReady = job.statusTS === 'Serviço Pneus Concluído' || job.statusTS === null || job.statusTS === undefined;
+
+    console.log(`🔍 Verificação de conclusão - GS: ${job.statusGS} (${isGsReady}), TS: ${job.statusTS} (${isTsReady})`);
 
     if (isGsReady && isTsReady) {
-      if (job.requiresAlignment) {
+      // 5. Se ambos estiverem prontos, decide o próximo passo.
+      if (job.requiresAlignment === true) {
+        // Se requer alinhamento, encontra o serviço de alinhamento associado.
         const alignQuery = query(
           collection(db, ...ALIGNMENT_COLLECTION_PATH),
-          where('serviceJobId', '==', docId),
-          where('status', '==', 'Aguardando Serviço Geral')
+          where('serviceJobId', '==', docId)
         );
         const alignSnapshot = await getDocs(alignQuery);
 
         if (!alignSnapshot.empty) {
           const alignDocRef = alignSnapshot.docs[0].ref;
-          await updateDoc(alignDocRef, { status: 'Aguardando' });
-          await updateDoc(serviceDocRef, { status: 'Serviço Geral Concluído' });
+          const alignData = alignSnapshot.docs[0].data();
+          
+          // Atualiza o alinhamento com informações do serviço concluído
+          await updateDoc(alignDocRef, { 
+            status: 'Aguardando',
+            gsDescription: job.serviceDescription || alignData.gsDescription,
+            gsMechanic: job.assignedMechanic || alignData.gsMechanic
+          });
+          
+          console.log(`✅ Serviço concluído e liberado para alinhamento: ${docId}`);
         } else {
+          // Caso de segurança: se não encontrar o alinhamento, vai para pagamento.
           await updateDoc(serviceDocRef, { status: 'Pronto para Pagamento' });
+          console.log(`⚠️ Alinhamento não encontrado, enviando para pagamento: ${docId}`);
         }
       } else {
+        // Não requer alinhamento, vai direto para pagamento
         await updateDoc(serviceDocRef, { status: 'Pronto para Pagamento' });
+        console.log(`✅ Serviço concluído e enviado para pagamento: ${docId}`);
       }
+    } else {
+      // Serviço parcialmente concluído - apenas um dos sub-serviços foi concluído
+      console.log(`⏳ Serviço parcialmente concluído - aguardando conclusão do outro serviço: ${docId}`);
     }
   } catch (error) {
     console.error("Erro ao marcar serviço como pronto (Firestore):", error);
@@ -217,38 +300,23 @@ export async function finalizeJob(docId, collectionType) {
 /* ============================================================================
    🧠 LÓGICA DE ATRIBUIÇÃO AUTOMÁTICA
 ============================================================================ */
-async function getLeastLoadedMechanic() {
+let lastAssignedMechanicIndex = -1;
+
+async function getNextMechanicInRotation() {
     if (state.MECHANICS.length === 0) {
         throw new Error("Nenhum mecânico (Geral) ativo para atribuição.");
     }
 
-    const q = query(
-        collection(db, ...SERVICE_COLLECTION_PATH), 
-        where('status', '==', 'Pendente'),
-        where('statusGS', '==', 'Pendente') // CORREÇÃO: Conta apenas os serviços pendentes para o mecânico geral
-    );
-    const snapshot = await getDocs(q);
-    const jobsToCount = snapshot.docs.map(doc => doc.data());
+    // Garante que a lista de mecânicos esteja ordenada para consistência
+    const sortedMechanics = [...state.MECHANICS].sort();
 
-    const load = {};
-    state.MECHANICS.forEach(m => load[m] = 0);
+    // Avança para o próximo índice, voltando ao início se chegar ao fim
+    lastAssignedMechanicIndex = (lastAssignedMechanicIndex + 1) % sortedMechanics.length;
 
-    jobsToCount.forEach(job => {
-        if (state.MECHANICS.includes(job.assignedMechanic)) {
-            load[job.assignedMechanic]++;
-        }
-    });
+    const nextMechanic = sortedMechanics[lastAssignedMechanicIndex];
 
-    let leastLoad = Infinity;
-    let leastLoadedMechanic = state.MECHANICS[0];
-    for (const mechanic of state.MECHANICS) {
-        if (load[mechanic] < leastLoad) {
-            leastLoad = load[mechanic];
-            leastLoadedMechanic = mechanic;
-        }
-    }
-    console.log(`🤖 Atribuição automática: ${leastLoadedMechanic} é o mecânico com menos carga.`);
-    return leastLoadedMechanic;
+    console.log(`🤖 Atribuição automática (Round-Robin): ${nextMechanic} é o próximo da fila.`);
+    return nextMechanic;
 }
 
 
@@ -256,13 +324,16 @@ async function getLeastLoadedMechanic() {
    🎬 HANDLERS DE FORMULÁRIO
 ============================================================================ */
 export function initServiceFormHandler() {
-    document.getElementById('service-form').addEventListener('submit', async (e) => {
+    const serviceForm = document.getElementById('service-form');
+    if (!serviceForm) return;
+    
+    serviceForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         if (!state.isLoggedIn || (state.currentUserRole !== MANAGER_ROLE && state.currentUserRole !== VENDEDOR_ROLE)) {
             return alertUser("Acesso negado.");
         }
 
-        const customerName = document.getElementById('customerName').value.trim();
+        const customerName = 'N/A'; // Campo removido da UI
         const vendedorName = document.getElementById('vendedorName').value; // Já preenchido e readonly
         const licensePlate = document.getElementById('licensePlate').value.trim().toUpperCase();
         const carModel = document.getElementById('carModel').value.trim();
@@ -271,13 +342,31 @@ export function initServiceFormHandler() {
         if (!isServiceDefined) serviceDescription = 'Avaliação';
 
         const mechanicSelection = document.getElementById('assignedMechanic').value;
-        const willAlign = document.querySelector('input[name="willAlign"]:checked').value === 'Sim';
-        const willTireChange = document.querySelector('input[name="willTireChange"]:checked').value === 'Sim';
+        const willAlignRadio = document.querySelector('input[name="willAlign"]:checked');
+        const willTireChangeRadio = document.querySelector('input[name="willTireChange"]:checked');
+        
+        if (!willAlignRadio || !willTireChangeRadio) {
+            alertUser("Por favor, selecione todas as opções.");
+            return;
+        }
+        
+        const willAlign = willAlignRadio.value === 'Sim';
+        const willTireChange = willTireChangeRadio.value === 'Sim';
 
         const errorElement = document.getElementById('service-error');
         const messageElement = document.getElementById('assignment-message');
+        
+        if (!errorElement || !messageElement) return;
+        
         errorElement.textContent = '';
         messageElement.textContent = 'Atribuindo...';
+
+        // Validações
+        if (!licensePlate || !carModel) {
+            errorElement.textContent = 'Por favor, preencha placa e modelo do veículo.';
+            messageElement.textContent = '';
+            return;
+        }
 
         if (!mechanicSelection) {
             errorElement.textContent = 'Por favor, atribua um mecânico para o serviço geral.';
@@ -288,7 +377,7 @@ export function initServiceFormHandler() {
         try {
             let assignedMechanic;
             if (mechanicSelection === 'automatic') {
-                assignedMechanic = await getLeastLoadedMechanic();
+                assignedMechanic = await getNextMechanicInRotation();
             } else {
                 assignedMechanic = mechanicSelection;
             }
@@ -325,7 +414,7 @@ export function initServiceFormHandler() {
             }
 
             messageElement.textContent = `✅ Serviço atribuído a ${assignedMechanic}!`;
-            document.getElementById('service-form').reset();
+            serviceForm.reset();
             setTimeout(() => (messageElement.textContent = ''), 5000);
 
         } catch (error) {
@@ -337,18 +426,30 @@ export function initServiceFormHandler() {
 }
 
 export function initAlignmentFormHandler() {
-    document.getElementById('alignment-form').addEventListener('submit', async (e) => {
+    const alignmentForm = document.getElementById('alignment-form');
+    if (!alignmentForm) return;
+    
+    alignmentForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         if (!state.isLoggedIn || (state.currentUserRole !== MANAGER_ROLE && state.currentUserRole !== VENDEDOR_ROLE)) {
             return alertUser("Acesso negado.");
         }
 
-        const customerName = document.getElementById('aliCustomerName').value.trim();
+        const customerName = 'N/A'; // Campo removido da UI
         const vendedorName = document.getElementById('aliVendedorName').value.trim();
         const licensePlate = document.getElementById('aliLicensePlate').value.trim().toUpperCase();
         const carModel = document.getElementById('aliCarModel').value.trim();
         const errorElement = document.getElementById('alignment-error');
+        
+        if (!errorElement) return;
+        
         errorElement.textContent = '';
+
+        // Validações
+        if (!vendedorName || !licensePlate || !carModel) {
+            errorElement.textContent = 'Por favor, preencha todos os campos obrigatórios.';
+            return;
+        }
 
         try {
             const newAlignmentCar = {
@@ -364,7 +465,7 @@ export function initAlignmentFormHandler() {
 
             await addDoc(collection(db, ...ALIGNMENT_COLLECTION_PATH), newAlignmentCar);
             errorElement.textContent = '✅ Cliente adicionado à fila de alinhamento!';
-            document.getElementById('alignment-form').reset();
+            alignmentForm.reset();
             setTimeout(() => errorElement.textContent = '', 5000);
 
         } catch (error) {
@@ -375,8 +476,20 @@ export function initAlignmentFormHandler() {
 }
 
 export async function defineService(docId, newDescription) {
-    if (state.currentUserRole !== MANAGER_ROLE && state.currentUserRole !== VENDEDOR_ROLE) return alertUser("Acesso negado.");
-    if (!newDescription || !docId) return alertUser("Descrição inválida.");
+    if (!state.isLoggedIn) {
+        alertUser("Você precisa estar logado.");
+        return;
+    }
+    
+    if (state.currentUserRole !== MANAGER_ROLE && state.currentUserRole !== VENDEDOR_ROLE) {
+        alertUser("Acesso negado.");
+        return;
+    }
+    
+    if (!newDescription || !docId) {
+        alertUser("Descrição inválida.");
+        return;
+    }
 
     const dataToUpdate = { serviceDescription: newDescription, isServiceDefined: true };
 

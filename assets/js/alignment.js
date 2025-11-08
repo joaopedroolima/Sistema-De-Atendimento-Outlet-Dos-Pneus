@@ -108,13 +108,25 @@ export async function moveAlignmentDown(docId) {
    🧾 ATUALIZAR STATUS DO ALINHAMENTO
 ============================================================================ */
 export async function updateAlignmentStatus(docId, newStatus) {
-  if (state.currentUserRole !== MANAGER_ROLE && state.currentUserRole !== ALIGNER_ROLE) return alertUser("Acesso negado.");
+  // Verifica permissões
+  if (!state.isLoggedIn) {
+    alertUser("Você precisa estar logado.");
+    return;
+  }
+  
+  if (state.currentUserRole !== MANAGER_ROLE && state.currentUserRole !== ALIGNER_ROLE) {
+    alertUser("Acesso negado. Apenas Gerente ou Alinhador podem atualizar status.");
+    return;
+  }
 
   try {
     let finalStatus = newStatus;
     let dataToUpdate = { status: finalStatus };
 
-    if (newStatus === 'Done') {
+    // Se for "Em Atendimento", apenas atualiza o status
+    if (newStatus === 'Em Atendimento') {
+      dataToUpdate = { status: 'Em Atendimento' };
+    } else if (newStatus === 'Done') {
       finalStatus = 'Pronto para Pagamento';
       dataToUpdate = { status: finalStatus, readyAt: serverNow() };
     }
@@ -125,6 +137,6 @@ export async function updateAlignmentStatus(docId, newStatus) {
     console.log(`🔧 Status atualizado: ${docId} -> ${finalStatus}`);
   } catch (err) {
     console.error("Erro ao atualizar status:", err);
-    alertUser("Erro ao atualizar status do alinhamento.");
+    alertUser(`Erro ao atualizar status do alinhamento: ${err.message}`);
   }
 }

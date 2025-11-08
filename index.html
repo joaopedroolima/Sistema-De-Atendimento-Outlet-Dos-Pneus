@@ -98,10 +98,6 @@
                             <h2 class="text-2xl font-semibold mb-6 text-gray-800 border-b pb-2">Registrar Nova Entrada</h2>
                             <form id="service-form" class="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
                                 <div class="mb-4">
-                                    <label for="customerName" class="block text-sm font-medium text-gray-700">Cliente</label>
-                                    <input type="text" id="customerName" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-3 border focus:ring-blue-500 focus:border-blue-500">
-                                </div>
-                                <div class="mb-4">
                                     <label for="vendedorName" class="block text-sm font-medium text-gray-700">Vendedor</label>
                                     <select id="vendedorName" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-3 border focus:ring-blue-500 focus:border-blue-500"></select>
                                 </div>
@@ -217,10 +213,6 @@
                             <h2 class="text-2xl font-semibold mb-6 text-gray-800 border-b pb-2">Adicionar Manualmente à Fila de Alinhamento</h2>
                             <form id="alignment-form" class="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
                                 <div class="mb-4">
-                                    <label for="aliCustomerName" class="block text-sm font-medium text-gray-700">Cliente</label>
-                                    <input type="text" id="aliCustomerName" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-3 border focus:ring-blue-500 focus:border-blue-500">
-                                </div>
-                                <div class="mb-4">
                                     <label for="aliVendedorName" class="block text-sm font-medium text-gray-700">Vendedor</label>
                                     <select id="aliVendedorName" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-3 border focus:ring-blue-500 focus:border-blue-500"></select>
                                 </div>
@@ -252,27 +244,44 @@
                 <!-- 3. Pagamentos e Finalização (Gerente) -->
                 <!-- NOVO: Adicionado ID para controle do Alinhador -->
                 <div id="monitor" class="tab-content">
-                    
-                    <!-- MUDANÇA: Bloco de estatísticas movido para baixo -->
-
-                    <h2 class="text-2xl font-semibold mb-6 text-gray-800 border-b pb-2">Carros Prontos para Pagamento (Gerência)</h2>
-                    <div id="ready-jobs-container" class="bg-white rounded-lg shadow-sm overflow-x-auto border border-gray-200">
-                        <p class="text-gray-500 p-4 text-center" id="ready-empty-message">Nenhum carro pronto para pagamento. Aguardando a conclusão dos serviços. ⏱️</p>
+                    <!-- NOVA ESTRUTURA DE SUB-ABAS -->
+                    <div class="border-b border-gray-200 mb-6">
+                        <nav id="monitor-sub-nav" class="-mb-px flex space-x-6" aria-label="Tabs">
+                            <button class="monitor-sub-tab-button active" data-sub-tab="dashboard">
+                                Dashboard do Dia
+                            </button>
+                            <button class="monitor-sub-tab-button" data-sub-tab="reports">
+                                Relatórios e Métricas
+                            </button>
+                        </nav>
                     </div>
 
-                    <!-- NOVO: Bloco de Estatísticas (Movido para cá) -->
-                    <h2 class="text-2xl font-semibold mb-6 text-gray-800 border-b pb-2 mt-8">Estatísticas do Dia</h2>
-                    <!-- MUDANÇA: Layout atualizado para 5 colunas e novo ID -->
-                    <div id="stats-container" class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-8">
-                        <!-- Card Total será injetado pelo JS -->
-                        <!-- Card Alinhamento será injetado pelo JS -->
-                        <!-- Stats de Mecânicos e Borracharia serão injetados aqui -->
-                    </div>
-                    <!-- Fim Bloco de Estatísticas -->
+                    <!-- Conteúdo da Sub-Aba: Dashboard -->
+                    <div id="dashboard" class="monitor-sub-tab-content active">
+                        <h2 class="text-2xl font-semibold mb-6 text-gray-800 border-b pb-2">Carros Prontos para Pagamento (Gerência)</h2>
+                        <div id="ready-jobs-container" class="bg-white rounded-lg shadow-sm overflow-x-auto border border-gray-200">
+                            <p class="text-gray-500 p-4 text-center" id="ready-empty-message">Nenhum carro pronto para pagamento. Aguardando a conclusão dos serviços. ⏱️</p>
+                        </div>
 
-                    <h2 class="text-2xl font-semibold mb-6 text-gray-800 border-b pb-2 mt-8">Monitor de Serviços Pendentes (<span id="mechanic-monitor-title"></span>)</h2>
-                    <div id="mechanics-monitor" class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <!-- Cartões de Monitoramento serão injetados aqui -->
+                        <h2 class="text-2xl font-semibold mb-6 text-gray-800 border-b pb-2 mt-8">Estatísticas do Dia</h2>
+                        <div id="stats-container" class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-8">
+                            <!-- Stats serão injetados aqui -->
+                        </div>
+
+                        <h2 class="text-2xl font-semibold mb-6 text-gray-800 border-b pb-2 mt-8">Monitor de Serviços Pendentes (<span id="mechanic-monitor-title"></span>)</h2>
+                        <div id="mechanics-monitor" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <!-- Cartões de Monitoramento serão injetados aqui -->
+                        </div>
+                    </div>
+
+                    <!-- Conteúdo da Sub-Aba: Relatórios -->
+                    <div id="reports" class="monitor-sub-tab-content">
+                        <h2 class="text-2xl font-semibold mb-6 text-gray-800 border-b pb-2">Relatórios e Métricas de Desempenho</h2>
+                        <!-- NOVO: Container para as métricas de relatório -->
+                        <div id="reports-metrics-container" class="grid grid-cols-1 md:grid-cols-4 gap-6">
+                            <!-- Cards de métricas serão injetados aqui pelo uiRender.js -->
+                        </div>
+                        <!-- Outros relatórios (gráficos, tabelas) podem ser adicionados aqui no futuro -->
                     </div>
                 </div>
 
@@ -400,7 +409,7 @@
                     </div>
                     <div class="mb-4">
                         <label for="edit-mecanico" class="block text-sm font-medium text-gray-700">Mecânico Responsável</label>
-                        <select id="edit-mecanico" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-3 border focus:ring-blue-500 focus:border-blue-500"></select>
+                        <select id="edit-mecanico" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-3 border focus:ring-blue-500 focus:border-blue-500"></select>
                     </div>
                 </div>
                 

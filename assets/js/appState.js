@@ -9,6 +9,10 @@ export const state = {
     isLoggedIn: false,
     serviceJobs: [],
     alignmentQueue: [],
+    finalizedToday: {
+        services: [],
+        alignments: []
+    }, // Cache para serviços finalizados hoje
     users: [],
     jobIdCounter: 100,
     aliIdCounter: 200,

@@ -52,7 +52,10 @@ function hideManagementModal() {
  * Mostra o modal de edição e preenche com os dados do serviço.
  */
 function handleShowEditModal() {
-    if (!jobToManage) return;
+    if (!jobToManage) {
+        console.error("Nenhum serviço selecionado para edição");
+        return;
+    }
 
     const { id, type } = jobToManage;
     const jobData = type === 'service'
@@ -61,15 +64,25 @@ function handleShowEditModal() {
 
     if (!jobData) {
         alertUser("Erro: Serviço não encontrado para edição.");
+        console.error("Serviço não encontrado:", { id, type, serviceJobs: state.serviceJobs.length, alignmentQueue: state.alignmentQueue.length });
         return;
     }
 
     // Popula as informações do carro
-    document.getElementById('edit-modal-car-info').textContent = `Carro: ${jobData.carModel} (${jobData.licensePlate})`;
+    const carInfoEl = document.getElementById('edit-modal-car-info');
+    if (carInfoEl) {
+        carInfoEl.textContent = `Carro: ${jobData.carModel || 'N/A'} (${jobData.licensePlate || 'N/A'})`;
+    }
 
     // Popula os dropdowns
     const vendedorSelect = document.getElementById('edit-vendedor');
     const mecanicoSelect = document.getElementById('edit-mecanico');
+
+    if (!vendedorSelect || !mecanicoSelect) {
+        console.error("Elementos do formulário de edição não encontrados");
+        alertUser("Erro: Formulário de edição não encontrado.");
+        return;
+    }
 
     const vendedores = state.users.filter(u => u.role === 'vendedor' || u.role === 'manager');
     const mecanicos = state.users.filter(u => u.role === 'mecanico');
@@ -78,18 +91,30 @@ function handleShowEditModal() {
     mecanicoSelect.innerHTML = mecanicos.map(u => `<option value="${u.username}">${u.username}</option>`).join('');
 
     // Seleciona os valores atuais
-    vendedorSelect.value = jobData.vendedorName;
-    if (jobData.assignedMechanic) {
+    vendedorSelect.value = jobData.vendedorName || '';
+    if (type === 'service' && jobData.assignedMechanic) {
         mecanicoSelect.value = jobData.assignedMechanic;
         mecanicoSelect.parentElement.style.display = 'block';
+    } else if (type === 'alignment' && jobData.gsMechanic) {
+        mecanicoSelect.value = jobData.gsMechanic;
+        mecanicoSelect.parentElement.style.display = 'block';
     } else {
-        // Esconde o campo de mecânico se for um alinhamento manual
-        mecanicoSelect.parentElement.style.display = 'none';
+        // Esconde o campo de mecânico se não houver mecânico associado
+        mecanicoSelect.parentElement.style.display = type === 'service' ? 'block' : 'none';
+        if (mecanicos.length > 0) {
+            mecanicoSelect.value = mecanicos[0].username; // Define um valor padrão
+        }
     }
 
     // Esconde o modal de gerenciamento e mostra o de edição
     hideManagementModal();
-    document.getElementById('edit-job-modal').classList.remove('hidden');
+    const editModal = document.getElementById('edit-job-modal');
+    if (editModal) {
+        editModal.classList.remove('hidden');
+    } else {
+        console.error("Modal de edição não encontrado");
+        alertUser("Erro: Modal de edição não encontrado.");
+    }
 }
 
 /**
@@ -131,8 +156,14 @@ async function handleUpdateJob(e) {
     const { id, type } = jobToManage;
     const collectionPath = type === 'service' ? SERVICE_COLLECTION_PATH : ALIGNMENT_COLLECTION_PATH;
 
-    const newVendedor = document.getElementById('edit-vendedor').value;
-    const newMecanico = document.getElementById('edit-mecanico').value;
+    const newVendedor = document.getElementById('edit-vendedor').value.trim();
+    const mecanicoSelect = document.getElementById('edit-mecanico');
+    const newMecanico = mecanicoSelect ? mecanicoSelect.value.trim() : '';
+    
+    if (!newVendedor) {
+        alertUser("Por favor, selecione um vendedor.");
+        return;
+    }
 
     const dataToUpdate = {
         vendedorName: newVendedor,
@@ -140,12 +171,34 @@ async function handleUpdateJob(e) {
     };
 
     if (type === 'service') {
+        // Retorna o serviço à fila resetando os status
+        if (!newMecanico) {
+            alertUser("Por favor, selecione um mecânico.");
+            return;
+        }
+        
         dataToUpdate.status = 'Pendente';
         dataToUpdate.assignedMechanic = newMecanico;
+        
+        // Reseta os status dos sub-serviços para garantir que volte à fila corretamente
+        const jobData = state.serviceJobs.find(j => j.id === id);
+        if (jobData) {
+            // Sempre reseta statusGS para pendente ao retornar à fila
+            dataToUpdate.statusGS = 'Pendente';
+            
+            // Se o serviço tinha statusTS, reseta também (mas só se tinha pneus)
+            if (jobData.statusTS !== null && jobData.statusTS !== undefined) {
+                dataToUpdate.statusTS = 'Pendente';
+            }
+        } else {
+            // Se não encontrou no estado, reseta mesmo assim
+            dataToUpdate.statusGS = 'Pendente';
+        }
     } else {
+        // Para alinhamento
         dataToUpdate.status = 'Aguardando';
         // Se o serviço de alinhamento tiver um mecânico associado, atualiza também
-        if (document.getElementById('edit-mecanico').parentElement.style.display !== 'none') {
+        if (mecanicoSelect.parentElement.style.display !== 'none' && newMecanico) {
             dataToUpdate.gsMechanic = newMecanico;
         }
     }
@@ -153,10 +206,9 @@ async function handleUpdateJob(e) {
     try {
         await updateDoc(doc(db, ...collectionPath, id), dataToUpdate);
         alertUser("Serviço atualizado e retornado à fila com prioridade.");
+        hideEditModal();
     } catch (error) {
         console.error("Erro ao atualizar e retornar serviço:", error);
         alertUser("Erro ao salvar as alterações no banco de dados.");
-    } finally {
-        hideEditModal();
     }
 }

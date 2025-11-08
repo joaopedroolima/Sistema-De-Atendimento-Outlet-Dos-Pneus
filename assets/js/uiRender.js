@@ -34,6 +34,34 @@ export function renderSalespersonDropdowns() {
     aliVendedorSelect.innerHTML = optionsHTML;
 }
 
+// Função de priorização inteligente para ordenação (escopo global da função)
+function getServicePriority(job, forTireShop = false) {
+    const isGsPending = job.statusGS === 'Pendente';
+    const isGsCompleted = job.statusGS === 'Serviço Geral Concluído';
+    const isTsPending = job.statusTS === 'Pendente';
+    const isTsCompleted = job.statusTS === 'Serviço Pneus Concluído';
+    
+    if (forTireShop) {
+        // Para borracheiro: serviços com GS concluído (prontos para pneus) têm prioridade máxima
+        if (isGsCompleted && isTsPending) {
+            return 1; // Prioridade máxima - pode iniciar imediatamente
+        } else if (isGsPending && isTsPending) {
+            return 2; // Prioridade média - aguardando GS
+        } else {
+            return 3; // Outros casos
+        }
+    } else {
+        // Para mecânicos: serviços normais (GS pendente) têm prioridade
+        if (isGsPending) {
+            return 1; // Prioridade máxima - pode iniciar
+        } else if (isGsCompleted && isTsPending) {
+            return 2; // Prioridade menor - GS já feito, só aguardando TS
+        } else {
+            return 3; // Outros casos
+        }
+    }
+}
+
 export function renderServiceQueues(jobs) {
     const mechanicsContainer = document.getElementById('mechanics-queue-display');
     const monitorContainer = document.getElementById('mechanics-monitor');
@@ -45,14 +73,42 @@ export function renderServiceQueues(jobs) {
     [...state.MECHANICS, state.TIRE_SHOP_MECHANIC].forEach(m => groupedJobs[m] = []); // Inclui 'Borracheiro'
     const tireShopJobs = [];
 
-    jobs.sort((a, b) => getTimestampSeconds(a.timestamp) - getTimestampSeconds(b.timestamp));
+    // Ordena por prioridade primeiro, depois por timestamp
+    jobs.sort((a, b) => {
+        // Para cada tipo de fila, calcula a prioridade
+        const priorityA = getServicePriority(a, false); // Mecânico
+        const priorityB = getServicePriority(b, false);
+        
+        if (priorityA !== priorityB) {
+            return priorityA - priorityB; // Menor número = maior prioridade
+        }
+        
+        // Se mesma prioridade, ordena por timestamp
+        return getTimestampSeconds(a.timestamp) - getTimestampSeconds(b.timestamp);
+    });
 
     jobs.forEach(job => {
-        if (job.statusGS === 'Pendente' && state.MECHANICS.includes(job.assignedMechanic)) {
-            groupedJobs[job.assignedMechanic].push(job);
+        // Serviço Geral: mostra na fila do mecânico se GS está pendente
+        // Mas também mostra se GS está concluído mas TS ainda está pendente (para mostrar estado)
+        const isGsPending = job.statusGS === 'Pendente';
+        const isGsCompleted = job.statusGS === 'Serviço Geral Concluído';
+        const isTsPending = job.statusTS === 'Pendente';
+        const isTsCompleted = job.statusTS === 'Serviço Pneus Concluído';
+        const hasTs = job.statusTS !== null && job.statusTS !== undefined;
+        
+        // Mostra na fila do mecânico se GS está pendente OU se GS está concluído mas TS ainda está pendente
+        if (state.MECHANICS.includes(job.assignedMechanic)) {
+            if (isGsPending || (isGsCompleted && hasTs && isTsPending)) {
+                groupedJobs[job.assignedMechanic].push(job);
+            }
         }
-        if (job.statusTS === 'Pendente' && job.assignedTireShop === state.TIRE_SHOP_MECHANIC) {
-            tireShopJobs.push(job);
+        
+        // Mostra na fila do borracheiro se TS está pendente
+        // Mas também mostra se TS está concluído mas GS ainda está pendente (para mostrar estado)
+        if (job.assignedTireShop === state.TIRE_SHOP_MECHANIC) {
+            if (isTsPending || (isTsCompleted && isGsPending)) {
+                tireShopJobs.push(job);
+            }
         }
     });
 
@@ -66,21 +122,52 @@ export function renderServiceQueues(jobs) {
     monitorContainer.innerHTML = '';
     tireShopList.innerHTML = '';
 
+    // Ordena a fila do borracheiro por prioridade (GS concluído primeiro)
+    tireShopJobs.sort((a, b) => {
+        const priorityA = getServicePriority(a, true); // true = para borracheiro
+        const priorityB = getServicePriority(b, true);
+        
+        if (priorityA !== priorityB) {
+            return priorityA - priorityB; // Menor número = maior prioridade
+        }
+        
+        // Se mesma prioridade, ordena por timestamp
+        return getTimestampSeconds(a.timestamp) - getTimestampSeconds(b.timestamp);
+    });
+
     tireShopCount.textContent = `${tireShopJobs.length} Carros`;
     if (tireShopJobs.length > 0) {
          tireShopList.innerHTML = tireShopJobs.map(job => {
             const isGsPending = job.statusGS === 'Pendente';
-            const statusText = isGsPending ? `(Aguardando GS: ${job.assignedMechanic})` : '';
-            const statusColor = isGsPending ? 'text-red-500' : 'text-gray-500';
+            const isGsCompleted = job.statusGS === 'Serviço Geral Concluído';
+            const isTsPending = job.statusTS === 'Pendente';
+            
+            let statusText = '';
+            let statusColor = 'text-gray-500';
+            
+            if (isGsPending && isTsPending) {
+                statusText = `(Aguardando GS: ${job.assignedMechanic})`;
+                statusColor = 'text-red-500';
+            } else if (isGsCompleted && isTsPending) {
+                statusText = `(GS Concluído - Pronto para Pneus)`;
+                statusColor = 'text-green-600';
+            } else if (isGsPending && !isTsPending) {
+                statusText = `(Aguardando GS: ${job.assignedMechanic})`;
+                statusColor = 'text-red-500';
+            }
+            
+            const canMarkReady = isTsPending;
+            
             return `
                 <li class="p-3 bg-white border-l-4 border-yellow-500 rounded-md shadow-sm flex justify-between items-center">
                     <div>
                         <p class="font-semibold text-gray-800">${job.licensePlate} (${job.carModel || 'N/A'})</p>
-                        <p class="text-sm ${statusColor}">${job.serviceDescription.substring(0, 30)}... ${statusText}</p>
+                        <p class="text-sm ${statusColor}">${job.serviceDescription ? job.serviceDescription.substring(0, 30) + '...' : 'Avaliação'} ${statusText}</p>
                     </div>
                     <button onclick="showServiceReadyConfirmation('${job.id}', 'TS')"
-                            class="text-xs font-medium bg-green-500 text-white py-1 px-3 rounded-full hover:bg-green-600 transition">
-                        Pronto
+                            class="text-xs font-medium bg-green-500 text-white py-1 px-3 rounded-full hover:bg-green-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                            ${!canMarkReady ? 'disabled' : ''}>
+                        ${canMarkReady ? 'Pronto' : 'Aguardando'}
                     </button>
                 </li>
             `;
@@ -95,13 +182,45 @@ export function renderServiceQueues(jobs) {
     }
 
     state.MECHANICS.forEach(mechanic => { // Para cada mecânico geral
-        const mechanicJobs = groupedJobs[mechanic] || [];
+        let mechanicJobs = groupedJobs[mechanic] || [];
+        
+        // Ordena a fila do mecânico por prioridade
+        mechanicJobs.sort((a, b) => {
+            const priorityA = getServicePriority(a, false); // false = para mecânico
+            const priorityB = getServicePriority(b, false);
+            
+            if (priorityA !== priorityB) {
+                return priorityA - priorityB; // Menor número = maior prioridade
+            }
+            
+            // Se mesma prioridade, ordena por timestamp
+            return getTimestampSeconds(a.timestamp) - getTimestampSeconds(b.timestamp);
+        });
+        
         const jobListHTML = mechanicJobs.map(job => {
+            const isGsPending = job.statusGS === 'Pendente';
+            const isGsCompleted = job.statusGS === 'Serviço Geral Concluído';
             const isTsPending = job.statusTS === 'Pendente';
-            const statusText = isTsPending ? `(Aguardando Pneus)` : '';
-            const statusColor = isTsPending ? 'text-red-500' : 'text-gray-500';
+            const isTsCompleted = job.statusTS === 'Serviço Pneus Concluído';
+            const hasTs = job.statusTS !== null && job.statusTS !== undefined;
+            
+            let statusText = '';
+            let statusColor = 'text-gray-500';
+            
+            if (isTsPending && hasTs) {
+                statusText = `(Aguardando Pneus)`;
+                statusColor = 'text-orange-500';
+            } else if (isGsCompleted && !hasTs) {
+                statusText = `(GS Concluído)`;
+                statusColor = 'text-green-600';
+            } else if (isGsCompleted && isTsCompleted) {
+                statusText = `(Ambos Concluídos)`;
+                statusColor = 'text-green-600';
+            }
+            
             const canDefineService = state.currentUserRole === MANAGER_ROLE || state.currentUserRole === VENDEDOR_ROLE;
             const isDefined = job.isServiceDefined;
+            const canMarkReady = isGsPending && isDefined;
 
             let descriptionHTML = '';
             let clickHandler = '';
@@ -115,7 +234,8 @@ export function renderServiceQueues(jobs) {
                     descriptionHTML += '<span class="text-xs text-blue-600 block">(Clique para definir)</span>';
                 }
             } else {
-                descriptionHTML = `<p class="text-sm ${statusColor}">${job.serviceDescription.substring(0, 30)}... ${statusText}</p>`;
+                const serviceDesc = job.serviceDescription ? job.serviceDescription.substring(0, 30) + '...' : 'Avaliação';
+                descriptionHTML = `<p class="text-sm ${statusColor}">${serviceDesc} ${statusText}</p>`;
             }
 
             return `
@@ -126,8 +246,8 @@ export function renderServiceQueues(jobs) {
                     </div>
                     <button onclick="event.stopPropagation(); showServiceReadyConfirmation('${job.id}', 'GS')"
                             class="text-xs font-medium bg-green-500 text-white py-1 px-3 rounded-full hover:bg-green-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                            ${!isDefined ? 'disabled' : ''}>
-                        Pronto
+                            ${!canMarkReady ? 'disabled' : ''}>
+                        ${canMarkReady ? 'Pronto' : (isGsCompleted ? 'Concluído' : 'Aguardando')}
                     </button>
                 </li>
             `;
@@ -181,15 +301,47 @@ function renderMechanicView(jobs, groupedJobs) {
     mechanicViewContainer.innerHTML = '';
 
     const myName = state.userId;
-    const myJobs = groupedJobs[myName] || [];
+    let myJobs = groupedJobs[myName] || [];
+    
+    // Ordena a fila do mecânico logado por prioridade
+    myJobs.sort((a, b) => {
+        const priorityA = getServicePriority(a, false); // false = para mecânico
+        const priorityB = getServicePriority(b, false);
+        
+        if (priorityA !== priorityB) {
+            return priorityA - priorityB; // Menor número = maior prioridade
+        }
+        
+        // Se mesma prioridade, ordena por timestamp
+        return getTimestampSeconds(a.timestamp) - getTimestampSeconds(b.timestamp);
+    });
 
     const jobListHTML = myJobs.map(job => {
+        const isGsPending = job.statusGS === 'Pendente';
+        const isGsCompleted = job.statusGS === 'Serviço Geral Concluído';
         const isTsPending = job.statusTS === 'Pendente';
-        const statusText = isTsPending ? `(Aguardando Pneus)` : '';
-        const statusColor = isTsPending ? 'text-red-500' : 'text-gray-500';
+        const isTsCompleted = job.statusTS === 'Serviço Pneus Concluído';
+        const hasTs = job.statusTS !== null && job.statusTS !== undefined;
+        
+        let statusText = '';
+        let statusColor = 'text-gray-500';
+        
+        if (isTsPending && hasTs) {
+            statusText = `(Aguardando Pneus)`;
+            statusColor = 'text-orange-500';
+        } else if (isGsCompleted && !hasTs) {
+            statusText = `(GS Concluído)`;
+            statusColor = 'text-green-600';
+        } else if (isGsCompleted && isTsCompleted) {
+            statusText = `(Ambos Concluídos)`;
+            statusColor = 'text-green-600';
+        }
+        
         const isDefined = job.isServiceDefined;
+        const canMarkReady = isGsPending && isDefined;
+        
         const descriptionHTML = isDefined
-            ? `<p class="text-sm ${statusColor}">${job.serviceDescription.substring(0, 30)}... ${statusText}</p>`
+            ? `<p class="text-sm ${statusColor}">${job.serviceDescription ? job.serviceDescription.substring(0, 30) + '...' : 'Avaliação'} ${statusText}</p>`
             : '<span class="font-bold text-red-600">(Aguardando Definição de Serviço)</span>';
 
         return `
@@ -200,8 +352,8 @@ function renderMechanicView(jobs, groupedJobs) {
                 </div>
                 <button onclick="event.stopPropagation(); showServiceReadyConfirmation('${job.id}', 'GS')"
                         class="text-xs font-medium bg-green-500 text-white py-1 px-3 rounded-full hover:bg-green-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                        ${!isDefined ? 'disabled' : ''}>
-                    Pronto
+                        ${!canMarkReady ? 'disabled' : ''}>
+                    ${canMarkReady ? 'Pronto' : (isGsCompleted ? 'Concluído' : 'Aguardando')}
                 </button>
             </li>
         `;
@@ -285,10 +437,20 @@ export function renderAlignmentQueue(cars) {
                         </div>`;
 
                     let actions = '';
+                    const canStartService = state.currentUserRole === MANAGER_ROLE || state.currentUserRole === ALIGNER_ROLE;
+                    
                     if (isAttending) {
-                        actions = `<button onclick="showAlignmentReadyConfirmation('${car.id}')" class="text-xs font-medium bg-green-500 text-white py-1 px-3 rounded-lg hover:bg-green-600 transition min-w-[120px]">Pronto</button>`;
-                    } else if (isNextWaiting) {
+                        // Mostra botão "Pronto" apenas para quem pode finalizar
+                        if (canStartService) {
+                            actions = `<button onclick="showAlignmentReadyConfirmation('${car.id}')" class="text-xs font-medium bg-green-500 text-white py-1 px-3 rounded-lg hover:bg-green-600 transition min-w-[120px]">Pronto</button>`;
+                        } else {
+                            actions = `<span class="text-xs text-gray-400">Em atendimento...</span>`;
+                        }
+                    } else if (isNextWaiting && canStartService) {
+                        // Mostra botão "Iniciar Atendimento" apenas para quem pode iniciar
                         actions = `<button onclick="updateAlignmentStatus('${car.id}', 'Em Atendimento')" class="text-xs font-medium bg-yellow-500 text-gray-900 py-1 px-3 rounded-lg hover:bg-yellow-600 transition min-w-[120px]">Iniciar Atendimento</button>`;
+                    } else if (isNextWaiting) {
+                        actions = `<span class="text-xs text-gray-400">Aguardando atendimento...</span>`;
                     } else {
                         actions = `<span class="text-xs text-gray-400">Na fila...</span>`;
                     }
@@ -395,16 +557,11 @@ export function renderReadyJobs(serviceJobs, alignmentQueue) {
 }
 
 export function calculateAndRenderDailyStats() {
-    // REFINAMENTO: Lógica de contagem mais precisa e robusta.
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
-    const startOfTodaySeconds = Math.floor(startOfToday.getTime() / 1000);
+    // OTIMIZAÇÃO: Usa cache de serviços finalizados hoje (já filtrados pela query)
+    const finalizedServicesToday = state.finalizedToday.services || [];
+    const finalizedAlignmentsToday = state.finalizedToday.alignments || [];
 
-    // 1. Filtra apenas os serviços e alinhamentos finalizados HOJE.
-    const finalizedServicesToday = state.serviceJobs.filter(j => j.status === 'Finalizado' && j.finalizedAt && getTimestampSeconds(j.finalizedAt) >= startOfTodaySeconds);
-    const finalizedAlignmentsToday = state.alignmentQueue.filter(a => a.status === 'Finalizado' && a.finalizedAt && getTimestampSeconds(a.finalizedAt) >= startOfTodaySeconds);
-
-    // 2. Calcula o total de carros únicos (por placa) para evitar contagem dupla.
+    // 1. Calcula o total de carros únicos (por placa) para evitar contagem dupla.
     const allFinalizedPlates = [
         ...finalizedServicesToday.map(j => j.licensePlate),
         ...finalizedAlignmentsToday.map(a => a.licensePlate)
@@ -412,25 +569,48 @@ export function calculateAndRenderDailyStats() {
     const uniquePlates = new Set(allFinalizedPlates.filter(Boolean));
     const totalToday = uniquePlates.size;
 
-    // 3. Contagem específica de alinhamentos finalizados hoje.
+    // 2. Contagem específica de alinhamentos finalizados hoje.
     const alignmentCount = finalizedAlignmentsToday.length;
 
-    // 4. Contagem de serviços por mecânico e borracheiro, apenas dos finalizados hoje.
+    // 3. Contagem de serviços por mecânico e borracheiro, apenas dos finalizados hoje.
     const mechanicStats = {};
-    state.MECHANICS.forEach(m => mechanicStats[m] = 0);
+    
+    // Inicializa estatísticas para todos os mecânicos conhecidos
+    if (state.MECHANICS && state.MECHANICS.length > 0) {
+        state.MECHANICS.forEach(m => mechanicStats[String(m).trim()] = 0);
+    }
     mechanicStats[state.TIRE_SHOP_MECHANIC] = 0;
 
     finalizedServicesToday.forEach(job => {
-        if (job.assignedMechanic && mechanicStats.hasOwnProperty(job.assignedMechanic)) {
-            mechanicStats[job.assignedMechanic]++;
+        // Conta serviço geral (GS) pelo mecânico atribuído
+        if (job.assignedMechanic) {
+            const mechanicName = String(job.assignedMechanic).trim();
+            // Inicializa se não existir
+            if (!mechanicStats.hasOwnProperty(mechanicName)) {
+                mechanicStats[mechanicName] = 0;
+            }
+            mechanicStats[mechanicName]++;
         }
-        if (job.assignedTireShop === state.TIRE_SHOP_MECHANIC) {
+        
+        // Conta serviço de pneus (TS) pelo borracheiro
+        // Só conta se o serviço realmente teve troca de pneus (assignedTireShop não é null)
+        if (job.assignedTireShop && String(job.assignedTireShop).trim() === state.TIRE_SHOP_MECHANIC) {
             mechanicStats[state.TIRE_SHOP_MECHANIC]++;
         }
     });
 
-    // 5. Renderiza os resultados no HTML.
+    // 4. Renderiza os resultados no HTML.
     const statsContainer = document.getElementById('stats-container');
+    if (!statsContainer) return; // Proteção contra erro se elemento não existir
+    
+    // CORREÇÃO: Usa um Set para garantir que a lista de mecânicos seja única,
+    // combinando a lista de mecânicos ativos com os que têm estatísticas, evitando duplicatas.
+    const uniqueMechanics = new Set([
+        ...(state.MECHANICS || []),
+        ...Object.keys(mechanicStats).filter(m => m !== state.TIRE_SHOP_MECHANIC)
+    ]);
+    const sortedMechanics = Array.from(uniqueMechanics).sort();
+    
     statsContainer.innerHTML = `
         <div class="p-4 bg-blue-100 rounded-lg shadow text-center">
             <p class="text-sm font-medium text-blue-800">TOTAL FINALIZADO (HOJE)</p>
@@ -442,15 +622,63 @@ export function calculateAndRenderDailyStats() {
         </div>
         <div class="p-4 bg-gray-100 rounded-lg shadow text-center">
             <p class="text-sm font-medium text-gray-800">${state.TIRE_SHOP_MECHANIC}</p>
-            <p class="text-3xl font-bold text-gray-900">${mechanicStats[state.TIRE_SHOP_MECHANIC]}</p>
+            <p class="text-3xl font-bold text-gray-900">${mechanicStats[state.TIRE_SHOP_MECHANIC] || 0}</p>
         </div>
-        ${state.MECHANICS.map(mechanic => `
+        ${sortedMechanics.map(mechanic => `
             <div class="p-4 bg-gray-100 rounded-lg shadow text-center">
                 <p class="text-sm font-medium text-gray-800">${mechanic}</p>
-                <p class="text-3xl font-bold text-gray-900">${mechanicStats[mechanic]}</p>
+                <p class="text-3xl font-bold text-gray-900">${mechanicStats[mechanic] || 0}</p>
             </div>`).join('')}
     `;
 }
+
+// NOVO: Função para calcular e renderizar as métricas da aba de Relatórios
+export function renderReportMetrics() {
+    const container = document.getElementById('reports-metrics-container');
+    if (!container) return;
+
+    // OTIMIZAÇÃO: Usa cache de serviços finalizados hoje
+    const finalizedServicesToday = state.finalizedToday.services || [];
+    const finalizedAlignmentsToday = state.finalizedToday.alignments || [];
+    const totalFinalizedToday = finalizedServicesToday.length + finalizedAlignmentsToday.length;
+
+    // Filtra serviços perdidos hoje (precisa buscar do estado completo ou criar query separada)
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const startOfTodaySeconds = Math.floor(startOfToday.getTime() / 1000);
+    
+    // Para serviços perdidos, filtra do estado atual (pode ser otimizado depois)
+    const lostServicesToday = state.serviceJobs.filter(j => j.status === 'Perdido' && j.timestamp && getTimestampSeconds(j.timestamp) >= startOfTodaySeconds);
+    const lostAlignmentsToday = state.alignmentQueue.filter(a => a.status === 'Perdido' && a.timestamp && getTimestampSeconds(a.timestamp) >= startOfTodaySeconds);
+    const totalLostToday = lostServicesToday.length + lostAlignmentsToday.length;
+
+    // 3. Calcula a taxa de desistência
+    const totalOpportunities = totalFinalizedToday + totalLostToday;
+    const lostRate = totalOpportunities > 0 ? ((totalLostToday / totalOpportunities) * 100).toFixed(1) : 0;
+
+    // NOVO: Verifica se há dados para exibir. Se não, mostra uma mensagem.
+    if (totalOpportunities === 0) {
+        container.innerHTML = `
+            <div class="col-span-full p-6 bg-gray-50 rounded-lg text-center border border-gray-200">
+                <p class="text-gray-600">Não há dados de serviços finalizados ou perdidos hoje para gerar relatórios. 📊</p>
+            </div>`;
+        return;
+    }
+
+    // 4. Renderiza os cards
+    container.innerHTML = `
+        <div class="p-4 bg-red-100 rounded-lg shadow text-center border border-red-200">
+            <p class="text-sm font-medium text-red-800">SERVIÇOS PERDIDOS (HOJE)</p>
+            <p class="text-4xl font-bold text-red-900 mt-1">${totalLostToday}</p>
+        </div>
+        <div class="p-4 bg-orange-100 rounded-lg shadow text-center border border-orange-200">
+            <p class="text-sm font-medium text-orange-800">TAXA DE DESISTÊNCIA</p>
+            <p class="text-4xl font-bold text-orange-900 mt-1">${lostRate}%</p>
+        </div>
+        <!-- Outros cards podem ser adicionados aqui -->
+    `;
+}
+
 
 // helper
 export function getTimestampSeconds(timestamp) {
@@ -502,16 +730,45 @@ export function renderUserList(users) {
 
 export function renderRemovalList(serviceJobs, alignmentQueue) {
     const container = document.getElementById('removal-list-container');
+    if (!container) return;
 
+    // Filtra serviços ativos e remove duplicatas por ID
     const activeServiceJobs = serviceJobs
-        .filter(job => ['Pendente', 'Serviço Geral Concluído'].includes(job.status))
+        .filter(job => {
+            // Inclui serviços que estão pendentes ou têm algum serviço pendente
+            const hasPendingService = job.statusGS === 'Pendente' || job.statusTS === 'Pendente';
+            const isPending = job.status === 'Pendente';
+            const isServiceGeneralCompleted = job.status === 'Serviço Geral Concluído';
+            return (isPending || isServiceGeneralCompleted || hasPendingService) && 
+                   job.status !== 'Finalizado' && 
+                   job.status !== 'Perdido';
+        })
         .map(job => ({ ...job, type: 'service', sortTimestamp: getTimestampSeconds(job.timestamp) }));
 
     const activeAlignmentJobs = alignmentQueue
         .filter(car => ['Aguardando', 'Em Atendimento', 'Aguardando Serviço Geral'].includes(car.status))
         .map(car => ({ ...car, type: 'alignment', sortTimestamp: getTimestampSeconds(car.timestamp) }));
 
-    const allActiveJobs = [...activeServiceJobs, ...activeAlignmentJobs];
+    // Remove duplicatas por ID antes de combinar
+    const uniqueServiceJobs = [];
+    const seenServiceIds = new Set();
+    activeServiceJobs.forEach(job => {
+        if (!seenServiceIds.has(job.id)) {
+            seenServiceIds.add(job.id);
+            uniqueServiceJobs.push(job);
+        }
+    });
+
+    const uniqueAlignmentJobs = [];
+    const seenAlignmentIds = new Set();
+    activeAlignmentJobs.forEach(job => {
+        if (!seenAlignmentIds.has(job.id)) {
+            seenAlignmentIds.add(job.id);
+            uniqueAlignmentJobs.push(job);
+        }
+    });
+
+    const allActiveJobs = [...uniqueServiceJobs, ...uniqueAlignmentJobs];
     allActiveJobs.sort((a, b) => b.sortTimestamp - a.sortTimestamp); // Invertido para mostrar mais recentes primeiro
 
     if (allActiveJobs.length === 0) {

@@ -317,28 +317,6 @@
                                 </div>
                             </div>
 
-                            <!-- Histórico Detalhado do Dia -->
-                            <div>
-                                <h2 class="text-xl font-semibold mb-4 text-gray-800">Histórico Detalhado do Dia</h2>
-                                <div id="dashboard-history-table-container" class="bg-white rounded-lg shadow-sm overflow-auto border border-gray-200 max-h-[600px]">
-                                    <table class="min-w-full divide-y divide-gray-200">
-                                        <thead class="bg-gray-50 sticky top-0">
-                                            <tr>
-                                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Carro (Placa/Modelo)</th>
-                                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vendedor</th>
-                                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Mecânico(s)</th>
-                                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Etapas</th>
-                                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Início</th>
-                                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Término</th>
-                                                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Duração</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="dashboard-history-tbody" class="bg-white divide-y divide-gray-200">
-                                            <tr><td colspan="7" class="p-4 text-center text-gray-500 italic">Calculando...</td></tr>
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
                         </div>
                     </div>
 
@@ -348,11 +326,11 @@
                             <!-- 1. Destaques do Dia -->
                             <div>
                                 <h2 class="text-xl font-semibold mb-4 text-gray-800">Destaques do Dia</h2>
-                                <div id="dashboard-highlights" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                                <div class="p-4 bg-green-100 rounded-lg shadow text-center"><p class="text-sm font-medium text-green-800">⚡ MELHOR DESEMPENHO</p><p id="dash-best-performer" class="text-3xl font-bold text-green-900">--</p><p id="dash-best-performer-avg" class="text-sm text-gray-700">--</p></div>
-                                <div class="p-4 bg-red-100 rounded-lg shadow text-center"><p class="text-sm font-medium text-red-800">⚠️ PIOR DESEMPENHO</p><p id="dash-worst-performer" class="text-3xl font-bold text-red-900">--</p><p id="dash-worst-performer-avg" class="text-sm text-gray-700">--</p></div>
-                                <div class="p-4 bg-yellow-100 rounded-lg shadow text-center"><p class="text-sm font-medium text-yellow-800">🚀 ATENDIMENTO MAIS RÁPIDO</p><p id="dash-fastest-car" class="text-3xl font-bold text-yellow-900">--</p><p id="dash-fastest-car-avg" class="text-sm text-gray-700">--</p></div>
+                                <div id="dashboard-highlights" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+                                <div class="p-4 bg-green-100 rounded-lg shadow text-center"><p class="text-sm font-medium text-green-800">🏅 MELHOR DESEMPENHO</p><p id="dash-best-performer" class="text-3xl font-bold text-green-900">--</p><p id="dash-best-performer-avg" class="text-sm text-gray-700">--</p></div>
+                                <div class="p-4 bg-red-100 rounded-lg shadow text-center"><p class="text-sm font-medium text-red-800">🧱 PIOR DESEMPENHO</p><p id="dash-worst-performer" class="text-3xl font-bold text-red-900">--</p><p id="dash-worst-performer-avg" class="text-sm text-gray-700">--</p></div>
                                 <div class="p-4 bg-orange-100 rounded-lg shadow text-center"><p class="text-sm font-medium text-orange-800">🐢 ATENDIMENTO MAIS LENTO</p><p id="dash-slowest-car" class="text-3xl font-bold text-orange-900">--</p><p id="dash-slowest-car-avg" class="text-sm text-gray-700">--</p></div>
+                                <div class="p-4 bg-yellow-100 rounded-lg shadow text-center"><p class="text-sm font-medium text-yellow-800">⚡ ATENDIMENTO MAIS RÁPIDO</p><p id="dash-fastest-car" class="text-3xl font-bold text-yellow-900">--</p><p id="dash-fastest-car-avg" class="text-sm text-gray-700">--</p></div>
                                 </div>
                             </div>
 
@@ -367,6 +345,46 @@
                                 <div>
                                     <h2 class="text-xl font-semibold mb-4 text-gray-800">Métricas por Etapa</h2>
                                     <div id="dashboard-stage-metrics" class="bg-white p-4 rounded-lg border space-y-4"></div>
+                                </div>
+                            </div>
+
+                            <!-- 4. Histórico de Atendimentos do Dia -->
+                            <div>
+                                <h2 class="text-xl font-semibold mb-4 text-gray-800">Histórico de Atendimentos do Dia</h2>
+                                <div id="dashboard-history-table-container" class="bg-white rounded-lg shadow-sm overflow-auto border border-gray-200 max-h-[600px]">
+                                    <table class="min-w-full divide-y divide-gray-200">
+                                        <thead class="bg-gray-50 sticky top-0">
+                                            <tr>
+                                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Carro (Placa/Modelo)</th>
+                                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vendedor</th>
+                                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Responsáveis</th>
+                                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Etapas</th>
+                                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Início</th>
+                                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Término</th>
+                                                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Duração Total</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="dashboard-history-tbody" class="bg-white divide-y divide-gray-200">
+                                            <tr><td colspan="7" class="p-4 text-center text-gray-500 italic">Calculando...</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <!-- NOVO: Histórico de Serviços Perdidos -->
+                            <div>
+                                <h2 class="text-xl font-semibold mb-4 text-red-800">Histórico de Serviços Perdidos no Dia</h2>
+                                <div id="lost-history-table-container" class="bg-white rounded-lg shadow-sm overflow-auto border border-red-200 max-h-[400px]">
+                                    <table class="min-w-full divide-y divide-gray-200">
+                                        <thead class="bg-red-50 sticky top-0">
+                                            <tr>
+                                                <th class="px-4 py-3 text-left text-xs font-medium text-red-700 uppercase">Carro (Placa/Modelo)</th>
+                                                <th class="px-4 py-3 text-left text-xs font-medium text-red-700 uppercase">Vendedor</th>
+                                                <th class="px-4 py-3 text-left text-xs font-medium text-red-700 uppercase">Etapa da Perda</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="lost-history-tbody" class="bg-white divide-y divide-gray-200"></tbody>
+                                    </table>
                                 </div>
                             </div>
                         </div>
@@ -493,6 +511,7 @@
                     <div>
                         <div class="mb-4">
                             <label for="edit-serviceDescription" class="block text-sm font-medium text-gray-700">Descrição do Serviço</A> (GS)</label>
+                            <label for="edit-serviceDescription" class="block text-sm font-medium text-gray-700">Descrição do Serviço (GS)</label>
                             <textarea id="edit-serviceDescription" rows="4" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-3 border focus:ring-blue-500 focus:border-blue-500"></textarea>
                         </div>
                         
@@ -2703,11 +2722,13 @@
             // Arrays para armazenar durações de cada etapa para cálculo da média geral
             const allWaitTimes = [];
             const allGsDurations = [];
+            const allTsDurations = []; // NOVO: Para métricas de borracharia
             const allAliDurations = [];
 
             const detailedHistoryList = [];
+            const lostHistoryList = []; // NOVO: Para histórico de perdas
             
-            // Inicializa stats para todos os mecânicos, incluindo os fixos
+            // Inicializa stats para todos os mecânicos, incluindo os fixos e os do DB
             let mechanicStats = {};
             [...MECHANICS, TIRE_SHOP_MECHANIC, ALIGNMENT_MECHANIC].forEach(m => {
                 mechanicStats[m] = {
@@ -2716,8 +2737,11 @@
                 };
             });
 
-            // Processa Serviços Gerais (que podem incluir borracharia e alinhamento)
-            finalizedServicesToday.forEach(job => {
+            // Junta todos os serviços do dia (finalizados e perdidos) para processamento
+            const allServicesToday = serviceJobs.filter(j => (j.status === STATUS_FINALIZED || j.status === STATUS_LOST) && isTimestampFromToday(j.finalizedAt));
+
+            // Processa Serviços Gerais (que podem incluir borracharia e alinhamento) - FINALIZADOS
+            allServicesToday.filter(j => j.status === STATUS_FINALIZED).forEach(job => {
                 const totalDurationMs = calculateDuration(job.timestamp, job.finalizedAt);
                 const mechanic = job.assignedMechanic;
                 
@@ -2727,6 +2751,7 @@
                 // --- Cálculo de Duração por Etapa (Req 5.3) ---
                 const waitTimeMs = calculateDuration(job.timestamp, job.gsStartedAt);
                 const gsDurationMs = calculateDuration(job.gsStartedAt, job.gsFinishedAt);
+                const tsDurationMs = calculateDuration(job.tsStartedAt, job.tsFinishedAt); // tsStartedAt precisa ser adicionado
                 if (waitTimeMs > 0) allWaitTimes.push(waitTimeMs);
                 if (gsDurationMs > 0) allGsDurations.push(gsDurationMs);
                 
@@ -2742,8 +2767,10 @@
                     etapas.push('Borracharia');
                     mecsEnvolvidos.push(TIRE_SHOP_MECHANIC);
                     // A participação do borracheiro é contada, mas a duração é difícil de isolar,
-                    // então contamos apenas a ocorrência.
-                    if (mechanicStats[TIRE_SHOP_MECHANIC]) mechanicStats[TIRE_SHOP_MECHANIC].count++;
+                    // então contamos apenas a ocorrência e a duração se disponível.
+                    if (mechanicStats[TIRE_SHOP_MECHANIC]) {
+                        mechanicStats[TIRE_SHOP_MECHANIC].count++;
+                    }
                 }
 
                 // Adiciona stats de Alinhamento (se houver)
@@ -2785,8 +2812,25 @@
                 });
             });
 
+            // NOVO: Processa serviços perdidos para o histórico de perdas
+            allServicesToday.filter(j => j.status === STATUS_LOST).forEach(job => {
+                let etapaPerda = 'Entrada'; // Padrão
+                if (job.statusGS === STATUS_PENDING && !job.gsStartedAt) {
+                    etapaPerda = 'Fila de Serviço Geral';
+                } else if (job.statusGS === STATUS_PENDING && job.gsStartedAt) {
+                    etapaPerda = 'Em Serviço Geral';
+                } else if (job.statusTS === STATUS_PENDING) {
+                    etapaPerda = 'Fila da Borracharia';
+                }
+                lostHistoryList.push({
+                    car: `${job.licensePlate} (${job.carModel})`,
+                    vendedor: job.vendedorName,
+                    etapa: etapaPerda
+                });
+            });
+
             // Processa Alinhamentos Manuais (que não têm serviceJobId)
-            finalizedAlignmentsToday.forEach(car => {
+            finalizedAlignmentsToday.filter(c => c.status === STATUS_FINALIZED).forEach(car => {
                 if (car.serviceJobId) return; // Já foi processado acima
 
                 const totalDurationMs = calculateDuration(car.timestamp, car.finalizedAt);
@@ -2811,8 +2855,8 @@
                 });
             });
 
-            // CORREÇÃO: Ordena o histórico pela duração em milissegundos (timestamp) para garantir a ordem correta.
-            detailedHistoryList.sort((a, b) => b.durationMs - a.durationMs);
+            // Ordena o histórico por horário de término, do mais recente para o mais antigo.
+            detailedHistoryList.sort((a, b) => b.endTime.localeCompare(a.endTime));
 
             // =================================================================
             // ETAPA 2: Calcular Métricas Agregadas (Req 5.4, 5.5)
@@ -2838,31 +2882,45 @@
             // --- Destaques (Req 5.5) ---
             let bestPerformer = { name: '--', avgStr: '--' };
             let worstPerformer = { name: '--', avgStr: '--' };
-            if (eligibleForRanking.length > 0) {
-                // Lógica de Score: recompensa mais carros e penaliza tempo alto.
-                eligibleForRanking.forEach(m => m.score = (m.count * 1000000) / (m.avgMs || 1));
+            if (eligibleForRanking.length > 0) {                
+                // Lógica de Score: 60% peso para tempo baixo, 40% para quantidade alta.
+                const maxCount = Math.max(...eligibleForRanking.map(m => m.count), 0);
+                const maxAvgMs = Math.max(...eligibleForRanking.map(m => m.avgMs), 0);
+
+                eligibleForRanking.forEach(m => {
+                    const normalizedCount = maxCount > 0 ? (m.count / maxCount) : 0;
+                    const normalizedTime = maxAvgMs > 0 ? (m.avgMs / maxAvgMs) : 0;
+                    // Score: 40% para contagem, 60% para tempo (invertido, pois tempo menor é melhor)
+                    m.score = (0.4 * normalizedCount) + (0.6 * (1 - normalizedTime));
+                });
+
                 const sortedByScore = [...eligibleForRanking].sort((a, b) => b.score - a.score);
                 bestPerformer = { name: sortedByScore[0].name, avgStr: formatDuration(sortedByScore[0].avgMs) };
-                if (sortedByScore.length > 1) {
-                    const worst = sortedByScore[sortedByScore.length - 1];
-                    worstPerformer = { name: worst.name, avgStr: formatDuration(worst.avgMs) };
-                }
+                
+                const worst = sortedByScore[sortedByScore.length - 1];
+                worstPerformer = { name: worst.name, avgStr: formatDuration(worst.avgMs) };
             }
 
             let slowestCar = { car: '--', avgStr: '--' };
             let fastestCar = { car: '--', avgStr: '--' };
             if (detailedHistoryList.length > 0) {
                 const sortedByDuration = [...detailedHistoryList].sort((a, b) => a.durationMs - b.durationMs);
+                
                 const slowest = sortedByDuration[sortedByDuration.length - 1];
-                // Adiciona o gargalo ao card do mais lento (Req 5.5)
                 const bottleneckInfo = slowest.bottleneck ? `Gargalo: ${slowest.bottleneck}` : '';
-                slowestCar = { car: slowest.car, avgStr: `${slowest.durationStr} (${bottleneckInfo})` };
-                fastestCar = { car: sortedByDuration[0].car, avgStr: sortedByDuration[0].durationStr };
+                slowestCar = { car: slowest.car, avgStr: `${slowest.durationStr}` };
+                if (bottleneckInfo) slowestCar.avgStr += ` (${bottleneckInfo})`;
+
+                const fastest = sortedByDuration[0];
+                const etapasInfo = fastest.etapas ? `Etapas: ${fastest.etapas}` : '';
+                fastestCar = { car: fastest.car, avgStr: `${fastest.durationStr}` };
+                if (etapasInfo) fastestCar.avgStr += ` (${etapasInfo})`;
             }
 
             // --- Métricas por Etapa (Req 5.4) ---
             const avgWaitTimeMs = calculateAvg(allWaitTimes);
             const avgGsTimeMs = calculateAvg(allGsDurations);
+            const avgTsTimeMs = calculateAvg(allTsDurations); // CORREÇÃO: Variável declarada aqui.
             const avgAliTimeMs = calculateAvg(allAliDurations);
             const minWaitTimeMs = allWaitTimes.length > 0 ? Math.min(...allWaitTimes) : 0;
             const maxWaitTimeMs = allWaitTimes.length > 0 ? Math.max(...allWaitTimes) : 0;
@@ -2883,7 +2941,7 @@
             document.getElementById('dash-worst-performer-avg').textContent = worstPerformer.avgStr;
             document.getElementById('dash-slowest-car').textContent = slowestCar.car;
             document.getElementById('dash-slowest-car-avg').textContent = slowestCar.avgStr;
-            document.getElementById('dash-fastest-car').textContent = fastestCar.car;
+            document.getElementById('dash-fastest-car').textContent = fastestCar.car; // Corrigido
             document.getElementById('dash-fastest-car-avg').textContent = fastestCar.avgStr;
             
             // Renderiza Métricas por Etapa (NOVO)
@@ -2891,19 +2949,21 @@
             let stageMetricsHTML = '';
             const stageData = [
                 { title: 'Espera na Fila', avg: avgWaitTimeMs, min: minWaitTimeMs, max: maxWaitTimeMs, color: 'border-yellow-400' },
-                { title: 'Serviço Geral', avg: avgGsTimeMs, min: minGsTimeMs, max: maxGsTimeMs, color: 'border-blue-400' },
-                { title: 'Alinhamento', avg: avgAliTimeMs, min: minAliTimeMs, max: maxAliTimeMs, color: 'border-indigo-400' }
+                { title: 'Serviço Geral', avg: avgGsTimeMs, min: minGsTimeMs, max: maxGsTimeMs, color: 'border-blue-400', count: allGsDurations.length },
+                { title: 'Borracharia', avg: avgTsTimeMs, min: 0, max: 0, color: 'border-gray-400', count: mechanicStats[TIRE_SHOP_MECHANIC]?.count || 0 }, // Duração da borracharia não é medida ainda
+                { title: 'Alinhamento', avg: avgAliTimeMs, min: minAliTimeMs, max: maxAliTimeMs, color: 'border-indigo-400', count: allAliDurations.length }
             ];
 
             stageData.forEach(stage => {
-                if (stage.avg > 0) {
+                if (stage.count > 0) { // Mostra se a etapa ocorreu
+                    const avgText = stage.avg > 0 ? `<strong>${formatDuration(stage.avg)}</strong> (média)` : `(${stage.count}x)`;
                     stageMetricsHTML += `
                         <div class="p-3 rounded-lg border-l-4 ${stage.color} bg-gray-50">
-                            <p class="font-semibold text-gray-800">${stage.title}</p>
+                            <p class="font-semibold text-gray-800">${stage.title} <span class="text-xs font-normal text-gray-500">(${stage.count} serviço${stage.count > 1 ? 's' : ''})</span></p>
                             <div class="flex justify-between items-baseline mt-1">
-                                <span class="text-xs text-gray-500">Mínimo: <strong class="text-green-600">${formatDuration(stage.min)}</strong></span>
-                                <span class="text-lg font-bold text-gray-900">${formatDuration(stage.avg)}</span>
-                                <span class="text-xs text-gray-500">Máximo: <strong class="text-red-600">${formatDuration(stage.max)}</strong></span>
+                                <span class="text-xs text-gray-500">${stage.min > 0 ? `Mín: <strong class="text-green-600">${formatDuration(stage.min)}</strong>` : ''}</span>
+                                <span class="text-lg font-bold text-gray-900">${avgText}</span>
+                                <span class="text-xs text-gray-500">${stage.max > 0 ? `Máx: <strong class="text-red-600">${formatDuration(stage.max)}</strong>` : ''}</span>
                             </div>
                         </div>
                     `;
@@ -2932,7 +2992,7 @@
                     const avgText = mec.avgMs > 0 ? `${formatDuration(mec.avgMs)}` : 'N/A';
                     return `
                         <div class="flex justify-between items-center text-sm p-2 rounded-md even:bg-gray-50">
-                            <span class="font-semibold text-gray-800">${mec.name} <span class="text-xs text-gray-500">(${role})</span></span>
+                            <span class="font-semibold text-gray-800">${mec.name}</span>
                             <span class="text-gray-600">${avgText} (média em ${mec.count} carro${mec.count > 1 ? 's' : ''})</span>
                         </div>
                     `;
@@ -2944,20 +3004,35 @@
 
             // Renderiza Histórico Detalhado (Req 5.5)
             const historyTbody = document.getElementById('dashboard-history-tbody');
-            if (detailedHistoryList.length > 0) {
-                 historyTbody.innerHTML = detailedHistoryList.map(item => `
-                    <tr>
+            if (historyTbody) {
+                if (detailedHistoryList.length > 0) {
+                     historyTbody.innerHTML = detailedHistoryList.map(item => {
+                        const durationClass = item.durationMs > (3600000 * 2) ? 'text-red-600' : item.durationMs < 1800000 ? 'text-green-600' : 'text-gray-900';
+                        return `
+                    <tr class="even:bg-gray-50/50">
                         <td class="px-4 py-3 text-sm font-medium text-gray-900">${item.car}</td>
                         <td class="px-4 py-3 text-sm text-gray-600">${item.vendedor}</td>
                         <td class="px-4 py-3 text-sm text-gray-600">${item.mechanics}</td>
                         <td class="px-4 py-3 text-sm text-gray-600">${item.etapas}</td>
                         <td class="px-4 py-3 text-sm text-gray-600">${item.startTime}</td>
                         <td class="px-4 py-3 text-sm text-gray-600">${item.endTime}</td>
-                        <td class="px-4 py-3 text-sm font-semibold text-gray-900 text-right">${item.durationStr}</td>
+                        <td class="px-4 py-3 text-sm font-semibold ${durationClass} text-right">${item.durationStr}</td>
                     </tr>
-                `).join('');
-            } else {
-                historyTbody.innerHTML = `<tr><td colspan="7" class="p-4 text-center text-gray-500 italic">Nenhum carro finalizado hoje.</td></tr>`;
+                `}).join('');
+                } else {
+                    historyTbody.innerHTML = `<tr><td colspan="7" class="p-4 text-center text-gray-500 italic">Nenhum carro finalizado hoje.</td></tr>`;
+                }
+            }
+
+            // NOVO: Renderiza Histórico de Perdas
+            const lostHistoryTbody = document.getElementById('lost-history-tbody');
+            if (lostHistoryTbody) {
+                if (lostHistoryList.length > 0) {
+                    lostHistoryTbody.innerHTML = lostHistoryList.map(item => `
+                        <tr class="bg-red-50/30"><td class="px-4 py-3 text-sm font-medium text-gray-900">${item.car}</td><td class="px-4 py-3 text-sm text-gray-600">${item.vendedor}</td><td class="px-4 py-3 text-sm font-semibold text-red-700">${item.etapa}</td></tr>`).join('');
+                } else {
+                    lostHistoryTbody.innerHTML = `<tr><td colspan="3" class="p-4 text-center text-gray-500 italic">Nenhum serviço perdido hoje.</td></tr>`;
+                }
             }
         }
 

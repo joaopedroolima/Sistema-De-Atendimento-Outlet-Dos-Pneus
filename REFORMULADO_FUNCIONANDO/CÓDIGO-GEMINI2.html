@@ -95,14 +95,6 @@
                     </button>
                 </form>
 
-                <div class="mt-6 text-sm text-gray-500 text-center border-t pt-4">
-                    <p>Modo Demo (Credenciais de Teste):</p>
-                    <ul class="mt-2 space-y-1">
-                        <li>**Gerente (Acesso Total):** gerente.outlet / gerenteitapoa</li>
-                        <li>**Alinhador (Acesso Restrito):** alinhador / alinhador123</li>
-                        <li>**Outros (Vendedor/Mecânico):** Use o login criado na aba "Admin".</li>
-                    </ul>
-                </div>
             </div>
         </div>
 
@@ -540,6 +532,37 @@
     </div>
     <!-- FIM MODAL EDIÇÃO -->
 
+    <!-- NOVO: MODAL PARA EDITAR USUÁRIO -->
+    <div id="edit-user-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-md p-6 transform transition-all">
+            <h3 class="text-xl font-bold text-gray-900 mb-2">Editar Usuário</h3>
+            <p id="edit-user-modal-username" class="text-gray-600 mb-6 text-sm"></p>
+            
+            <form id="edit-user-form">
+                <div class="mb-4">
+                    <label for="edit-user-password" class="block text-sm font-medium text-gray-700">Nova Senha (Opcional)</label>
+                    <input type="password" id="edit-user-password" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-3 border focus:ring-blue-500 focus:border-blue-500" placeholder="Deixe em branco para não alterar">
+                </div>
+                <div class="mb-6">
+                    <label for="edit-user-role" class="block text-sm font-medium text-gray-700">Cargo</label>
+                    <select id="edit-user-role" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-3 border focus:ring-blue-500 focus:border-blue-500">
+                        <option value="vendedor">Vendedor</option>
+                        <option value="mecanico">Mecânico (Geral)</option>
+                        <option value="aligner">Alinhador</option>
+                    </select>
+                </div>
+                
+                <div class="flex justify-end space-x-3 mt-8">
+                    <button type="button" onclick="hideEditUserModal()" class="py-2 px-4 bg-gray-200 text-gray-700 font-semibold rounded-lg hover:bg-gray-300 transition">
+                        Cancelar
+                    </button>
+                    <button type="submit" class="py-2 px-4 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 transition">
+                        Salvar Alterações
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
 
     <!-- JAVASCRIPT EMBUTIDO -->
     <script type="module">
@@ -624,6 +647,7 @@
         let currentJobToDefineId = null; 
         let currentJobToEditId = null; 
         let currentJobToConfirm = { id: null, type: null, confirmAction: null, serviceType: null }; 
+        let currentUserToEditId = null; // NOVO: Para edição de usuário
         let lastAssignedMechanicIndex = -1; // NOVO: Para o rodízio de mecânicos (Req 3.1)
         
         let MECHANICS = ['José', 'Wendell']; // MANTIDO: Como fallback inicial, será substituído pelo Firestore
@@ -692,16 +716,19 @@
             mainNav.classList.remove('hidden');
             
             if (role === ALIGNER_ROLE) {
-                // Req 1.4: Alinhador não pode mais adicionar carros manualmente
-                [tabServicos, tabMonitor, tabAdmin, alignmentForm].forEach(el => el.classList.add('hidden'));
+                // ATUALIZADO: Alinhador agora pode adicionar carros, como o vendedor.
+                // Esconde as outras abas principais.
+                [tabServicos, tabMonitor, tabAdmin].forEach(el => el.classList.add('hidden'));
                 
+                // Mostra a aba de alinhamento e o formulário de adição.
+                [tabAlinhamento, alignmentForm, alignmentFormTitle].forEach(el => el.classList.remove('hidden'));
+                
+                // Define a aba de alinhamento como a ativa.
                 tabAlinhamento.classList.remove('hidden');
                 contentServicos.classList.remove('active');
                 contentMonitor.classList.remove('active');
-                
                 tabAlinhamento.classList.add('active');
                 contentAlinhamento.classList.add('active');
-                alignmentFormTitle.textContent = "Fila de Alinhamento";
 
             } else if (role === MANAGER_ROLE) {
                 [tabServicos, tabAlinhamento, tabMonitor, tabAdmin, alignmentForm].forEach(el => el.classList.remove('hidden', 'aligner-hidden'));
@@ -727,6 +754,14 @@
                 const aliVendedorSelect = document.getElementById('aliVendedorName');
                 aliVendedorSelect.value = username;
                 aliVendedorSelect.disabled = true;
+
+                // CORREÇÃO: Garante que a lista de mecânicos seja renderizada
+                // para o vendedor na inicialização. A função renderMechanicsManagement
+                // é chamada mais abaixo, mas a lista de títulos precisa ser
+                // atualizada aqui para a primeira renderização.
+                const mechanicTitle = MECHANICS.join(', ');
+                document.getElementById('mechanic-list-title').textContent = mechanicTitle;
+
 
             } else if (role === MECANICO_ROLE) {
                 // Req 1.4: Visão do Mecânico
@@ -961,7 +996,9 @@
             }
 
             emptyMessage.style.display = 'none';
+            // Ícones para os botões de ação
             const deleteIcon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>`;
+            const editIcon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.536L16.732 3.732z" /></svg>`;
 
             container.innerHTML = `
                 <ul class="divide-y divide-gray-200">
@@ -971,11 +1008,17 @@
                                 <p class="text-sm font-medium text-gray-900">${user.username}</p>
                                 <p class="text-sm text-gray-500">${user.role}</p>
                             </div>
-                            ${user.role !== MANAGER_ROLE ? `
-                            <button onclick="showDeleteUserConfirmation('${user.id}')" title="Excluir Usuário" class="p-2 text-red-500 hover:bg-red-100 rounded-full transition-colors">
-                                ${deleteIcon}
-                            </button>
-                            ` : ''}
+                            <div class="flex items-center space-x-2">
+                                ${user.role !== MANAGER_ROLE ? `
+                                    <button onclick="showEditUserModal('${user.id}')" title="Editar Usuário" class="p-2 text-blue-500 hover:bg-blue-100 rounded-full transition-colors">                                        ${editIcon}
+                                    </button>
+                                    <button onclick="showDeleteUserConfirmation('${user.id}')" title="Excluir Usuário" class="p-2 text-red-500 hover:bg-red-100 rounded-full transition-colors">
+                                        ${deleteIcon}
+                                    </button>
+                                ` : `
+                                    <span class="text-xs text-gray-400 italic pr-2">Ações desabilitadas para Gerente</span>
+                                `}
+                            </div>
                         </li>
                     `).join('')}
                 </ul>`;
@@ -1348,6 +1391,7 @@
             if (confirmAction === "finalize") confirmFinalizeJob();
             if (confirmAction === "markAsLost") confirmMarkAsLost(); 
             if (confirmAction === "deleteUser") confirmDeleteUser(); // NOVO: Confirmação de exclusão de usuário
+            if (confirmAction === "updateUser") handleUpdateUser(); // NOVO: Confirmação de edição de usuário
         });
 
         function showConfirmationModal(id, type, title, message, confirmAction, serviceType = null) {
@@ -1468,6 +1512,75 @@
             }
             hideConfirmationModal();
         }
+
+        // =========================================================================
+        // NOVO: Funções do Modal "Editar Usuário"
+        // =========================================================================
+
+        window.showEditUserModal = function(userId) {
+            if (currentUserRole !== MANAGER_ROLE) return;
+
+            const user = systemUsers.find(u => u.id === userId);
+            if (!user) {
+                alertUser("Erro: Usuário não encontrado.");
+                return;
+            }
+
+            currentUserToEditId = userId;
+
+            document.getElementById('edit-user-modal-username').textContent = `Usuário: ${user.username}`;
+            document.getElementById('edit-user-role').value = user.role;
+            document.getElementById('edit-user-password').value = ''; // Limpa o campo de senha
+
+            document.getElementById('edit-user-modal').classList.remove('hidden');
+        }
+
+        window.hideEditUserModal = function() {
+            document.getElementById('edit-user-modal').classList.add('hidden');
+            document.getElementById('edit-user-form').reset();
+            currentUserToEditId = null;
+        }
+
+        async function handleUpdateUser(e) {
+            e.preventDefault();
+            const userId = currentUserToEditId;
+            if (!userId) return;
+
+            const newPassword = document.getElementById('edit-user-password').value;
+            const newRole = document.getElementById('edit-user-role').value;
+
+            const dataToUpdate = {
+                role: newRole
+            };
+
+            // Apenas adiciona a senha ao objeto de atualização se ela foi preenchida
+            if (newPassword && newPassword.trim() !== '') {
+                dataToUpdate.password = newPassword;
+            }
+
+            if (isDemoMode) {
+                const userIndex = systemUsers.findIndex(u => u.id === userId);
+                if (userIndex !== -1) {
+                    systemUsers[userIndex] = { ...systemUsers[userIndex], ...dataToUpdate };
+                    renderUserList(systemUsers);
+                    alertUser("MODO DEMO: Usuário atualizado na lista.");
+                }
+            } else {
+                try {
+                    const userRef = doc(db, USERS_COLLECTION_PATH, userId);
+                    await updateDoc(userRef, dataToUpdate);
+                    alertUser("Usuário atualizado com sucesso!");
+                } catch (error) {
+                    console.error("Erro ao atualizar usuário:", error);
+                    alertUser("Erro ao salvar as alterações no banco de dados.");
+                }
+            }
+
+            hideEditUserModal();
+        }
+
+        // Adiciona o listener ao formulário de edição de usuário
+        document.getElementById('edit-user-form').addEventListener('submit', handleUpdateUser);
 
 
         // =========================================================================
@@ -2662,7 +2775,7 @@
                 detailedHistoryList.push({
                     car: `${job.licensePlate} (${job.carModel})`,
                     vendedor: job.vendedorName,
-                    mechanics: mecsEnvolvidos.join(', '),
+                    mechanics: Array.from(new Set(mecsEnvolvidos)).join(', '), // Garante mecânicos únicos
                     etapas: etapas.join(', '),
                     startTime: formatTime(job.timestamp),
                     endTime: formatTime(job.finalizedAt),
@@ -2688,7 +2801,7 @@
                 detailedHistoryList.push({
                     car: `${car.licensePlate} (${car.carModel})`,
                     vendedor: car.vendedorName,
-                    mechanics: ALIGNMENT_MECHANIC,
+                    mechanics: Array.from(new Set([ALIGNMENT_MECHANIC])).join(', '),
                     etapas: 'Alinhamento',
                     startTime: formatTime(car.timestamp),
                     endTime: formatTime(car.finalizedAt),
@@ -2698,8 +2811,8 @@
                 });
             });
 
-            // Ordena o histórico por hora de término
-            detailedHistoryList.sort((a, b) => getTimestampSeconds(b.endTime) - getTimestampSeconds(a.endTime));
+            // CORREÇÃO: Ordena o histórico pela duração em milissegundos (timestamp) para garantir a ordem correta.
+            detailedHistoryList.sort((a, b) => b.durationMs - a.durationMs);
 
             // =================================================================
             // ETAPA 2: Calcular Métricas Agregadas (Req 5.4, 5.5)
@@ -2973,6 +3086,9 @@
         window.showMarkAsLostConfirmation = showMarkAsLostConfirmation;
 
         window.showDeleteUserConfirmation = showDeleteUserConfirmation; // NOVO
+        window.showEditUserModal = showEditUserModal; // NOVO
+        window.hideEditUserModal = hideEditUserModal; // NOVO
+
         window.confirmDeleteUser = confirmDeleteUser; // NOVO
         document.getElementById('create-user-form').addEventListener('submit', handleCreateUser);
         initializeFirebase();

@@ -1147,8 +1147,14 @@
             e.preventDefault();
             if (!isLoggedIn) return alertUser("Você precisa estar logado para cadastrar serviços.");
 
-            // CORREÇÃO: Pega o nome do usuário logado diretamente do estado da sessão.
-            const vendedorName = currentUserName;
+            // HOTFIX: Pega o nome do vendedor corretamente.
+            // Se for gerente, pega do select. Se for vendedor, pega do usuário logado.
+            let vendedorName = '';
+            if (currentUserRole === MANAGER_ROLE) {
+                vendedorName = document.getElementById('vendedorName').value;
+            } else {
+                vendedorName = currentUserName;
+            }
             const licensePlate = document.getElementById('licensePlate').value.trim().toUpperCase();
             const carModel = document.getElementById('carModel').value.trim();
             

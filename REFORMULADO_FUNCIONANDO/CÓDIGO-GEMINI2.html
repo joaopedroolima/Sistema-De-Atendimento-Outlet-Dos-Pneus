@@ -532,7 +532,6 @@
                     <!-- Coluna 2 -->
                     <div>
                         <div class="mb-4">
-                            <label for="edit-serviceDescription" class="block text-sm font-medium text-gray-700">Descrição do Serviço</A> (GS)</label>
                             <label for="edit-serviceDescription" class="block text-sm font-medium text-gray-700">Descrição do Serviço (GS)</label>
                             <textarea id="edit-serviceDescription" rows="4" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-3 border focus:ring-blue-500 focus:border-blue-500"></textarea>
                         </div>
@@ -1532,8 +1531,9 @@
         }
 
         window.showMarkAsLostConfirmation = function(docId) {
-            if (currentUserRole !== MANAGER_ROLE) return alertUser("Acesso negado. Apenas Gerentes podem realizar esta ação.");
-            
+            // ATUALIZAÇÃO: Permite que Vendedores também marquem como perdido.
+            if (currentUserRole !== MANAGER_ROLE && currentUserRole !== VENDEDOR_ROLE) return alertUser("Acesso negado.");
+
             const title = 'Confirmar Serviço Perdido';
             const message = `Tem certeza que deseja marcar este serviço como **PERDIDO**? Ele será removido das filas ativas e contado nas estatísticas de perdas. Esta ação não pode ser desfeita.`;
             
@@ -1571,12 +1571,15 @@
             }
 
             // Se não houver serviços ativos, prossegue com a confirmação
-            confirmDeleteUser(userId);
+            const title = `Excluir Usuário`;
+            const message = `Tem certeza que deseja excluir o usuário <strong>${user.username}</strong> (${user.role})? Esta ação é irreversível.`;
+            showFinalizeModal(userId, 'user', title, message, 'deleteUser');
         }
 
+        // HOTFIX: Restaurando a função que foi removida acidentalmente.
         window.confirmServiceReady = function(serviceType) {
             if (currentJobToConfirm.id && currentJobToConfirm.confirmAction === 'service') {
-                markServiceReady(currentJobToConfirm.id, serviceType); 
+                markServiceReady(currentJobToConfirm.id, serviceType);
             }
             hideConfirmationModal();
         }
@@ -1768,7 +1771,8 @@
         // =========================================================================
 
         window.showEditServiceModal = function(docId) {
-            if (currentUserRole !== MANAGER_ROLE) return;
+            // ATUALIZAÇÃO: Permite que Vendedores também editem.
+            if (currentUserRole !== MANAGER_ROLE && currentUserRole !== VENDEDOR_ROLE) return;
 
             const job = serviceJobs.find(j => j.id === docId);
             if (!job) {
@@ -2085,7 +2089,8 @@
         }
 
         async function markServiceAsLost(docId) {
-            if (currentUserRole !== MANAGER_ROLE) return alertUser("Acesso negado.");
+            // ATUALIZAÇÃO: Permite que Vendedores também marquem como perdido.
+            if (currentUserRole !== MANAGER_ROLE && currentUserRole !== VENDEDOR_ROLE) return alertUser("Acesso negado.");
             
             const lostTimestamp = isDemoMode ? Timestamp.fromMillis(Date.now()) : serverTimestamp();
             const dataToUpdate = { status: STATUS_LOST, finalizedAt: lostTimestamp };
@@ -2217,6 +2222,8 @@
             
             const pendingJobs = jobs.filter(job => job.status === STATUS_PENDING);
             const isManager = currentUserRole === MANAGER_ROLE; 
+            // ATUALIZAÇÃO: Vendedores agora também podem editar e excluir.
+            const canEditAndDelete = currentUserRole === MANAGER_ROLE || currentUserRole === VENDEDOR_ROLE; 
 
             const groupedJobs = {};
             MECHANICS.forEach(m => groupedJobs[m] = []);
@@ -2244,7 +2251,7 @@
                     const statusText = isGsPending ? `(Aguardando GS: ${job.assignedMechanic})` : '';
                     const statusColor = isGsPending ? 'text-red-500' : 'text-gray-500';
 
-                    const managerActions = isManager ? `
+                    const managerActions = canEditAndDelete ? `
                         <div class="flex space-x-1 mt-2 justify-end">
                             <button onclick="showEditServiceModal('${job.id}')" title="Editar Serviço"
                                     class="p-1 text-xs text-blue-600 bg-blue-100 rounded-full hover:bg-blue-200 transition">
@@ -2316,7 +2323,7 @@
                         descriptionHTML = `<p class="text-sm ${statusColor}">${job.serviceDescription.substring(0, 30)}... ${statusText}</p>`;
                     }
 
-                    const managerActions = isManager ? `
+                    const managerActions = canEditAndDelete ? `
                         <div class="flex space-x-1 mt-2 pt-2 border-t border-gray-100">
                             <button onclick="showEditServiceModal('${job.id}')" title="Editar Serviço"
                                     class="p-1 text-xs text-blue-600 bg-blue-100 rounded-full hover:bg-blue-200 transition">
@@ -2370,7 +2377,14 @@
                         const statusText = isTsPending ? `(Aguardando Pneus)` : '';
                         const statusColor = isTsPending ? 'text-red-500' : 'text-gray-500';
                         const isDefined = job.isServiceDefined;
-                        let actionButtonHTML = '';
+                        
+                        // HOTFIX: Adiciona o botão "Pronto" para a visão do mecânico.
+                        let actionButtonHTML = `<button onclick="showServiceReadyConfirmation('${job.id}', 'GS')"
+                                                        class="text-sm font-medium bg-green-500 text-white py-2 px-4 rounded-lg hover:bg-green-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                                        ${!isDefined ? 'disabled' : ''} title="${!isDefined ? 'Aguardando definição do serviço pela gerência' : 'Marcar como Pronto'}">
+                                                    Pronto
+                                                </button>`;
+
 
                         let descriptionHTML = `<p class="text-sm ${statusColor}">${job.serviceDescription.substring(0, 40)}... ${statusText}</p>`;
                         if (!isDefined) {

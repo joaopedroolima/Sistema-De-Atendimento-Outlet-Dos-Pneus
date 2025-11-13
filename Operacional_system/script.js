@@ -37,12 +37,12 @@ const initialAuthToken = (isCanvasEnvironment && typeof __initial_auth_token !==
 
 let db;
 let auth;
-let analytics; 
+let analytics;
 let userId = 'loading';
 let isAuthReady = false;
-let isDemoMode = false; 
+let isDemoMode = false;
 
-if (firebaseConfig.apiKey === "SUA_API_KEY_AQUI") { 
+if (firebaseConfig.apiKey === "SUA_API_KEY_AQUI") {
     console.warn("Chaves do Firebase não configuradas. Entrando no Modo Demo.");
     isDemoMode = true;
 }
@@ -76,9 +76,9 @@ let alignmentQueue = [];
 let jobIdCounter = 100;
 let aliIdCounter = 200;
 
-let currentJobToDefineId = null; 
-let currentJobToEditId = null; 
-let currentJobToConfirm = { id: null, type: null, confirmAction: null, serviceType: null }; 
+let currentJobToDefineId = null;
+let currentJobToEditId = null;
+let currentJobToConfirm = { id: null, type: null, confirmAction: null, serviceType: null };
 let currentUserToEditId = null; // NOVO: Para edição de usuário
 let lastAssignedMechanicIndex = -1; // NOVO: Para o rodízio de mecânicos (Req 3.1)
 
@@ -94,17 +94,17 @@ const USERS_COLLECTION_PATH = `/artifacts/${appId}/public/data/users`;
 
 // STATUS GLOBAIS
 const STATUS_PENDING = 'Pendente';
-const STATUS_READY = 'Pronto para Pagamento'; 
-const STATUS_FINALIZED = 'Finalizado'; 
-const STATUS_LOST = 'Perdido'; 
+const STATUS_READY = 'Pronto para Pagamento';
+const STATUS_FINALIZED = 'Finalizado';
+const STATUS_LOST = 'Perdido';
 
 // STATUS DE SERVIÇO GERAL (GS)
 const STATUS_GS_FINISHED = 'Serviço Geral Concluído';
 const STATUS_TS_FINISHED = 'Serviço Pneus Concluído';
 
 // STATUS DE ALINHAMENTO
-const STATUS_WAITING_GS = 'Aguardando Serviço Geral'; 
-const STATUS_WAITING = 'Aguardando'; 
+const STATUS_WAITING_GS = 'Aguardando Serviço Geral';
+const STATUS_WAITING = 'Aguardando';
 const STATUS_ATTENDING = 'Em Atendimento';
 
 // ------------------------------------
@@ -116,14 +116,14 @@ function postLoginSetup(user) {
     isLoggedIn = true;
     currentUserRole = role;
     currentUserName = username;
-    
+
     document.getElementById('login-container').classList.add('hidden');
     document.getElementById('main-content').classList.remove('hidden');
 
     // Salva sessão no localStorage (Req 1.3)
     localStorage.setItem('currentUser', JSON.stringify(user));
     document.getElementById('user-info').textContent = `Usuário: ${username} | Cargo: ${role.toUpperCase()}`;
-    
+
     const mechanicTitle = MECHANICS.join(', ');
     document.getElementById('mechanic-list-title').textContent = mechanicTitle;
 
@@ -131,7 +131,7 @@ function postLoginSetup(user) {
     const tabAlinhamento = document.getElementById('tab-alinhamento');
     const tabMonitor = document.getElementById('tab-monitor');
     const tabAdmin = document.getElementById('tab-admin');
-    
+
     const contentServicos = document.getElementById('servicos');
     const contentAlinhamento = document.getElementById('alinhamento');
     const contentMonitor = document.getElementById('monitor');
@@ -146,15 +146,15 @@ function postLoginSetup(user) {
     [tabServicos, tabAlinhamento, tabMonitor, tabAdmin, alignmentForm, alignmentFormTitle, mechanicView].forEach(el => el.classList.add('hidden'));
     [contentServicos, contentAlinhamento, contentMonitor, contentAdmin, mechanicView].forEach(el => el.classList.remove('active'));
     mainNav.classList.remove('hidden');
-    
+
     if (role === ALIGNER_ROLE) {
         // ATUALIZADO: Alinhador agora pode adicionar carros, como o vendedor.
         // Esconde as outras abas principais.
         [tabServicos, tabMonitor, tabAdmin].forEach(el => el.classList.add('hidden'));
-        
+
         // Mostra a aba de alinhamento e o formulário de adição.
         [tabAlinhamento, alignmentForm, alignmentFormTitle].forEach(el => el.classList.remove('hidden'));
-        
+
         // Define a aba de alinhamento como a ativa.
         tabAlinhamento.classList.remove('hidden');
         contentServicos.classList.remove('active');
@@ -165,7 +165,7 @@ function postLoginSetup(user) {
     } else if (role === MANAGER_ROLE) {
         [tabServicos, tabAlinhamento, tabMonitor, tabAdmin, alignmentForm].forEach(el => el.classList.remove('hidden', 'aligner-hidden'));
         alignmentFormTitle.textContent = "Adicionar Manualmente à Fila de Alinhamento";
-        
+
         tabServicos.classList.add('active');
         contentServicos.classList.add('active');
         tabAlinhamento.classList.remove('active');
@@ -212,7 +212,7 @@ function postLoginSetup(user) {
 
     renderServiceQueues(serviceJobs);
     renderAlignmentQueue(alignmentQueue);
-    renderAlignmentMirror(alignmentQueue); 
+    renderAlignmentMirror(alignmentQueue);
     renderReadyJobs(serviceJobs, alignmentQueue);
     calculateAndRenderDashboard(); // ATUALIZADO: Chamando o novo dashboard
 }
@@ -281,13 +281,13 @@ function initializeFirebase() {
 
     if (isDemoMode) {
         document.getElementById('user-info').textContent = `MODO DEMO ATIVO (Dados não persistentes).`;
-        isAuthReady = true; 
+        isAuthReady = true;
         document.getElementById('login-container').classList.remove('hidden');
-        
+
         renderServiceQueues(serviceJobs);
         renderAlignmentQueue(alignmentQueue);
-        renderAlignmentMirror(alignmentQueue); 
-        renderReadyJobs(serviceJobs, alignmentQueue); 
+        renderAlignmentMirror(alignmentQueue);
+        renderReadyJobs(serviceJobs, alignmentQueue);
         calculateAndRenderDashboard(); // ATUALIZADO
         return;
     }
@@ -303,11 +303,11 @@ function initializeFirebase() {
         const app = initializeApp(firebaseConfig);
         db = getFirestore(app);
         auth = getAuth(app);
-        analytics = getAnalytics(app); 
-        setLogLevel('Debug'); 
+        analytics = getAnalytics(app);
+        setLogLevel('Debug');
 
         onAuthStateChanged(auth, async (user) => {
-            
+
             if (isCanvasEnvironment) {
                 if (initialAuthToken) {
                     try {
@@ -319,7 +319,7 @@ function initializeFirebase() {
                 } else if (!user) {
                     await signInAnonymously(auth);
                 }
-                
+
                 userId = auth.currentUser?.uid || crypto.randomUUID();
                 if (savedUser) {
                     postLoginSetup(JSON.parse(savedUser));
@@ -331,8 +331,8 @@ function initializeFirebase() {
                 isAuthReady = true;
 
             } else {
-                userId = auth.currentUser?.uid || crypto.randomUUID(); 
-                
+                userId = auth.currentUser?.uid || crypto.randomUUID();
+
                 if (!user) {
                     try {
                         await signInAnonymously(auth);
@@ -353,7 +353,7 @@ function initializeFirebase() {
         });
     } catch (e) {
         console.error("Erro ao inicializar Firebase:", e);
-        document.getElementById('main-content').classList.remove('hidden'); 
+        document.getElementById('main-content').classList.remove('hidden');
         document.getElementById('service-error').textContent = `Erro Fatal: Falha na inicialização do Firebase. Verifique a console.`;
     }
 }
@@ -463,21 +463,21 @@ function renderUserList(users) {
 // ------------------------------------
 
 function renderMechanicsManagement() {
-    const manualSelect = document.getElementById('manualMechanic'); 
+    const manualSelect = document.getElementById('manualMechanic');
     const editSelect = document.getElementById('edit-assignedMechanic');
     const vendedorSelect = document.getElementById('vendedorName');
     const aliVendedorSelect = document.getElementById('aliVendedorName');
 
     MECHANICS = mecanicosGeral.map(u => u.username); // Atualiza a lista de mecânicos
-    
+
     const mechanicTitle = MECHANICS.join(', ');
     document.getElementById('mechanic-list-title').textContent = mechanicTitle;
-    
+
     let optionsHTML = '<option value="">-- Automático --</option>';
     optionsHTML += MECHANICS.map(m => `<option value="${m}">${m}</option>`).join('');
-    
+
     if (manualSelect) manualSelect.innerHTML = optionsHTML;
-    if (editSelect) editSelect.innerHTML = MECHANICS.map(m => `<option value="${m}">${m}</option>`).join(''); 
+    if (editSelect) editSelect.innerHTML = MECHANICS.map(m => `<option value="${m}">${m}</option>`).join('');
 
     // Popula dropdowns de vendedores (Req 6.2)
     const vendedorOptionsHTML = vendedores.map(v => `<option value="${v.username}">${v.username}</option>`).join('');
@@ -499,7 +499,7 @@ function getNextMechanicInRotation() {
     if (MECHANICS.length === 0) {
         throw new Error("Nenhum mecânico (Geral) ativo para atribuição.");
     }
-    
+
     // CORREÇÃO: Garante que a lista de mecânicos esteja sempre na mesma ordem (alfabética)
     // para que o rodízio (lastAssignedMechanicIndex) funcione de forma consistente.
     const sortedMechanics = [...MECHANICS].sort();
@@ -536,16 +536,16 @@ document.getElementById('service-form').addEventListener('submit', async (e) => 
     }
     const licensePlate = document.getElementById('licensePlate').value.trim().toUpperCase();
     const carModel = document.getElementById('carModel').value.trim();
-    
+
     let serviceDescription = document.getElementById('serviceDescription').value.trim();
     const isServiceDefined = serviceDescription !== '';
     if (!isServiceDefined) {
         serviceDescription = "Avaliação";
     }
-    
+
     const manualSelection = document.getElementById('manualMechanic').value;
     const willAlign = document.querySelector('input[name="willAlign"]:checked').value === 'Sim';
-    const willTireChange = document.querySelector('input[name="willTireChange"]:checked').value === 'Sim'; 
+    const willTireChange = document.querySelector('input[name="willTireChange"]:checked').value === 'Sim';
 
     const errorElement = document.getElementById('service-error');
     const messageElement = document.getElementById('assignment-message');
@@ -572,7 +572,7 @@ document.getElementById('service-form').addEventListener('submit', async (e) => 
             return;
         }
     }
-    
+
     if (willTireChange) {
         assignedTireShop = TIRE_SHOP_MECHANIC;
     }
@@ -588,36 +588,36 @@ document.getElementById('service-form').addEventListener('submit', async (e) => 
         assignedTireShop,
         status: STATUS_PENDING,
         statusGS: STATUS_PENDING,
-        statusTS: willTireChange ? STATUS_PENDING : null, 
+        statusTS: willTireChange ? STATUS_PENDING : null,
         requiresAlignment: willAlign,
-        timestamp: isDemoMode ? Timestamp.fromMillis(Date.now()) : serverTimestamp(), 
+        timestamp: isDemoMode ? Timestamp.fromMillis(Date.now()) : serverTimestamp(),
         gsStartedAt: isDemoMode ? Timestamp.fromMillis(Date.now()) : serverTimestamp(), // NOVO: Início automático do serviço
         registeredBy: userId, // Mantido para rastreabilidade
         id: `job_${jobIdCounter++}`,
         type: 'Serviço Geral',
         finalizedAt: null
     };
-    
+
     try {
         if (isDemoMode) {
             serviceJobs.push(newJob);
-            
+
             let statusMessage = ` Simulação: Serviço Geral atribuído a ${assignedMechanic}!`;
             if (willTireChange) {
                 statusMessage += ` e Serviço de Pneus ao Borracheiro!`;
             }
-            
+
             if (willAlign) {
                 const newAlignmentCar = {
                     customerName: 'N/A',
                     vendedorName,
                     licensePlate,
                     carModel,
-                    status: STATUS_WAITING_GS, 
-                    gsDescription: newJob.serviceDescription, 
+                    status: STATUS_WAITING_GS,
+                    gsDescription: newJob.serviceDescription,
                     gsMechanic: newJob.assignedMechanic,
                     serviceJobId: newJob.id,
-                    timestamp: Timestamp.fromMillis(Date.now() + 10), 
+                    timestamp: Timestamp.fromMillis(Date.now() + 10),
                     addedBy: userId,
             gsStartedAt: newJob.gsStartedAt, // NOVO: Propaga o tempo de início
                     id: `ali_${aliIdCounter++}`,
@@ -625,8 +625,8 @@ document.getElementById('service-form').addEventListener('submit', async (e) => 
                     finalizedAt: null
                 };
                 alignmentQueue.push(newAlignmentCar);
-                
-                renderAlignmentQueue(alignmentQueue); 
+
+                renderAlignmentQueue(alignmentQueue);
                 renderAlignmentMirror(alignmentQueue);
                 statusMessage += ` e adicionado à fila de Alinhamento (Aguardando)!`;
             }
@@ -637,11 +637,11 @@ document.getElementById('service-form').addEventListener('submit', async (e) => 
             errorElement.textContent = "MODO DEMO: Dados não salvos.";
             messageElement.textContent = statusMessage;
         } else {
-            const serviceJobId = newJob.id; 
-            delete newJob.id; 
-            
+            const serviceJobId = newJob.id;
+            delete newJob.id;
+
             const jobRef = await addDoc(collection(db, SERVICE_COLLECTION_PATH), newJob);
-            
+
             if (willAlign) {
                  const newAlignmentCar = {
                     customerName: 'N/A',
@@ -655,12 +655,12 @@ document.getElementById('service-form').addEventListener('submit', async (e) => 
                     addedBy: userId,
                     gsStartedAt: newJob.gsStartedAt, // NOVO: Propaga o tempo de início
                     type: 'Alinhamento',
-                    serviceJobId: jobRef.id, 
+                    serviceJobId: jobRef.id,
                     finalizedAt: null
                 };
                 await addDoc(collection(db, ALIGNMENT_COLLECTION_PATH), newAlignmentCar);
             }
-            
+
             messageElement.textContent = ` Serviço Geral atribuído a ${assignedMechanic}!`;
             if (willTireChange) {
                 messageElement.textContent += ` e Pneus ao Borracheiro!`;
@@ -684,8 +684,15 @@ document.getElementById('alignment-form').addEventListener('submit', async (e) =
     e.preventDefault();
     if (!isLoggedIn) return alertUser("Você precisa estar logado para cadastrar serviços.");
 
-    // CORREÇÃO: Pega o nome do usuário logado diretamente do estado da sessão.
-    const vendedorName = currentUserName;
+    // CORREÇÃO: Pega o nome do vendedor corretamente, dependendo do cargo do usuário.
+    // Se for gerente, pega do select. Se for vendedor ou alinhador, pega do usuário logado.
+    let vendedorName = '';
+    if (currentUserRole === MANAGER_ROLE) {
+        vendedorName = document.getElementById('aliVendedorName').value;
+    } else {
+        vendedorName = currentUserName;
+    }
+
     const licensePlate = document.getElementById('aliLicensePlate').value.trim().toUpperCase();
     const carModel = document.getElementById('aliCarModel').value.trim();
     const errorElement = document.getElementById('alignment-error');
@@ -702,8 +709,8 @@ document.getElementById('alignment-form').addEventListener('submit', async (e) =
             vendedorName,
             licensePlate,
             carModel,
-            status: STATUS_WAITING, 
-            timestamp: isDemoMode ? Timestamp.fromMillis(Date.now()) : serverTimestamp(), 
+            status: STATUS_WAITING,
+            timestamp: isDemoMode ? Timestamp.fromMillis(Date.now()) : serverTimestamp(),
             addedBy: userId,
             id: `ali_${aliIdCounter++}`,
             type: 'Alinhamento',
@@ -716,7 +723,7 @@ document.getElementById('alignment-form').addEventListener('submit', async (e) =
             alignmentQueue.push(newAlignmentCar);
             renderAlignmentQueue(alignmentQueue);
             renderAlignmentMirror(alignmentQueue);
-            renderReadyJobs(serviceJobs, alignmentQueue); 
+            renderReadyJobs(serviceJobs, alignmentQueue);
             errorElement.textContent = 'MODO DEMO: Cliente adicionado (Não salvo).';
         } else {
             delete newAlignmentCar.id;
@@ -740,7 +747,7 @@ document.getElementById('alignment-form').addEventListener('submit', async (e) =
 
 function findAdjacentCar(currentIndex, direction) {
     const activeCars = getSortedAlignmentQueue();
-    
+
     let adjacentIndex = currentIndex + direction;
     while(adjacentIndex >= 0 && adjacentIndex < activeCars.length) {
         if (activeCars[adjacentIndex].status === STATUS_WAITING) {
@@ -753,11 +760,11 @@ function findAdjacentCar(currentIndex, direction) {
 
 async function moveAlignmentUp(docId) {
     if (currentUserRole !== MANAGER_ROLE) return alertUser("Acesso negado. Apenas Gerentes podem mover carros na fila.");
-    
+
     const sortedQueue = getSortedAlignmentQueue();
     const index = sortedQueue.findIndex(car => car.id === docId);
     if (index === -1 || sortedQueue[index].status !== STATUS_WAITING) return;
-    
+
     const currentCar = sortedQueue[index];
     const carBefore = findAdjacentCar(index, -1);
 
@@ -801,7 +808,7 @@ async function moveAlignmentDown(docId) {
         alertUser("Este carro já é o último na fila de espera.");
         return;
     }
-    
+
     const newTimeMillis = (getTimestampSeconds(carAfter.timestamp) * 1000) + 1000;
     const newTimestamp = Timestamp.fromMillis(newTimeMillis);
 
@@ -812,8 +819,8 @@ async function moveAlignmentDown(docId) {
         renderAlignmentQueue(alignmentQueue);
         renderAlignmentMirror(alignmentQueue);
         return;
-    } 
-    
+    }
+
     try {
         const docRef = doc(db, ALIGNMENT_COLLECTION_PATH, docId);
         await updateDoc(docRef, { timestamp: newTimestamp });
@@ -835,26 +842,26 @@ document.getElementById("confirm-button").addEventListener("click", () => {
         hideConfirmationModal();
         return;
     }
-    
+
     if (confirmAction === "service") confirmServiceReady(serviceType);
     if (confirmAction === "alignment") confirmAlignmentReady();
     if (confirmAction === "finalize") confirmFinalizeJob();
-    if (confirmAction === "markAsLost") confirmMarkAsLost(); 
+    if (confirmAction === "markAsLost") confirmMarkAsLost();
     if (confirmAction === "deleteUser") confirmDeleteUser(); // NOVO: Confirmação de exclusão de usuário
     if (confirmAction === "updateUser") handleUpdateUser(); // NOVO: Confirmação de edição de usuário
 });
 
 function showConfirmationModal(id, type, title, message, confirmAction, serviceType = null) {
-    currentJobToConfirm = { id, type, confirmAction, serviceType }; 
+    currentJobToConfirm = { id, type, confirmAction, serviceType };
     const modal = document.getElementById('confirmation-modal');
     document.getElementById('modal-title').textContent = title;
     document.getElementById('modal-message').innerHTML = message;
-    
+
     const confirmButton = document.getElementById('confirm-button');
     confirmButton.classList.remove('bg-red-600', 'hover:bg-red-700');
     confirmButton.classList.add('bg-green-600', 'hover:bg-green-700');
     confirmButton.textContent = 'Sim, Confirmar';
-    
+
     modal.classList.remove('hidden');
 }
 
@@ -863,11 +870,11 @@ function showFinalizeModal(id, type, title, message, confirmAction) {
     const modal = document.getElementById('confirmation-modal');
     document.getElementById('modal-title').textContent = title;
     document.getElementById('modal-message').innerHTML = message;
-    
+
     const confirmButton = document.getElementById('confirm-button');
     confirmButton.classList.remove('bg-green-600', 'hover:bg-green-700');
     confirmButton.classList.add('bg-red-600', 'hover:bg-red-700');
-    
+
     if (confirmAction === 'finalize') confirmButton.textContent = 'Sim, Finalizar e Receber';
     else if (confirmAction === 'markAsLost') confirmButton.textContent = 'Sim, Marcar como Perdido';
     else if (confirmAction === 'deleteUser') confirmButton.textContent = 'Sim, Excluir Usuário';
@@ -885,10 +892,10 @@ window.hideConfirmationModal = function() {
 
 window.showServiceReadyConfirmation = function(docId, serviceType) {
     if (!isLoggedIn) return alertUser("Você precisa estar logado para realizar esta ação.");
-    
+
     const title = serviceType === 'GS' ? 'Confirmar Serviço Geral Concluído' : 'Confirmar Serviço de Pneus Concluído';
     const message = `Tem certeza de que deseja marcar este serviço (${serviceType === 'GS' ? 'Geral' : 'Pneus'}) como PRONTO e liberá-lo?`;
-    
+
     showConfirmationModal(docId, 'service', title, message, 'service', serviceType);
 }
 
@@ -900,10 +907,10 @@ window.showAlignmentReadyConfirmation = function(docId) {
 
 window.showFinalizeConfirmation = function(docId, collectionType) {
     if (currentUserRole !== MANAGER_ROLE) return alertUser("Acesso negado. Apenas Gerentes podem finalizar pagamentos.");
-    
+
     const title = collectionType === 'service' ? 'Finalizar Pagamento (Mecânica)' : 'Finalizar Pagamento (Alinhamento)';
     const message = `Confirma a finalização e recebimento do pagamento para o serviço de **${collectionType === 'service' ? 'Mecânica' : 'Alinhamento'}**? Esta ação marcará o carro como 'Finalizado'.`;
-    
+
      showFinalizeModal(docId, collectionType, title, message, 'finalize');
 }
 
@@ -913,22 +920,11 @@ window.showMarkAsLostConfirmation = function(docId) {
 
     const title = 'Confirmar Serviço Perdido';
     const message = `Tem certeza que deseja marcar este serviço como **PERDIDO**? Ele será removido das filas ativas e contado nas estatísticas de perdas. Esta ação não pode ser desfeita.`;
-    
+
      showFinalizeModal(docId, 'service', title, message, 'markAsLost');
 }
 
 // NOVO: Modal de confirmação para deletar usuário (Req 2.3)
-window.showDeleteUserConfirmation = function(userId) {
-    if (currentUserRole !== MANAGER_ROLE) return;
-    const user = systemUsers.find(u => u.id === userId);
-    if (!user) return;
-
-    const title = `Excluir Usuário`;
-    const message = `Tem certeza que deseja excluir o usuário <strong>${user.username}</strong> (${user.role})? Esta ação é irreversível.`;
-    showFinalizeModal(userId, 'user', title, message, 'deleteUser');
-}
-
-// NOVO: Wrapper para o modal de confirmação de exclusão de usuário (Req 4)
 window.showDeleteUserConfirmation = function(userId) {
     if (currentUserRole !== MANAGER_ROLE) return;
     const user = systemUsers.find(u => u.id === userId);
@@ -1065,7 +1061,7 @@ document.getElementById('edit-user-form').addEventListener('submit', handleUpdat
 // =========================================================================
 
 window.showDefineServiceModal = function(docId) {
-    if (currentUserRole !== MANAGER_ROLE) return; 
+    if (currentUserRole !== MANAGER_ROLE) return;
 
     const job = serviceJobs.find(j => j.id === docId);
     if (!job) {
@@ -1075,10 +1071,10 @@ window.showDefineServiceModal = function(docId) {
 
     currentJobToDefineId = docId;
     document.getElementById('service-modal-car-info').textContent = `Carro: ${job.carModel} (${job.licensePlate})`;
-    
+
     const currentDescription = job.serviceDescription === "Avaliação" ? "" : job.serviceDescription;
     document.getElementById('new-service-description').value = currentDescription;
-    
+
     document.getElementById('define-service-modal').classList.remove('hidden');
     document.getElementById('new-service-description').focus();
 }
@@ -1110,15 +1106,15 @@ document.getElementById('define-service-form').addEventListener('submit', async 
             serviceJobs[jobIndex].serviceDescription = newDescription;
             serviceJobs[jobIndex].isServiceDefined = true;
         }
-        
+
         const alignmentIndex = alignmentQueue.findIndex(a => a.serviceJobId === docId);
         if (alignmentIndex !== -1) {
             alignmentQueue[alignmentIndex].gsDescription = newDescription;
         }
-        
+
         renderServiceQueues(serviceJobs);
         renderAlignmentMirror(alignmentQueue);
-        renderAlignmentQueue(alignmentQueue); 
+        renderAlignmentQueue(alignmentQueue);
     } else {
         try {
             const docRef = doc(db, SERVICE_COLLECTION_PATH, docId);
@@ -1126,19 +1122,19 @@ document.getElementById('define-service-form').addEventListener('submit', async 
 
             const alignQuery = query(collection(db, ALIGNMENT_COLLECTION_PATH), where('serviceJobId', '==', docId));
             const alignSnapshot = await getDocs(alignQuery);
-            
+
             if (!alignSnapshot.empty) {
                 const alignDocRef = alignSnapshot.docs[0].ref;
                 await updateDoc(alignDocRef, { gsDescription: newDescription });
             }
-            
+
             alertUser("Serviço definido com sucesso!");
         } catch (error) {
             console.error("Erro ao definir serviço:", error);
             alertUser("Erro ao salvar serviço no banco de dados.");
         }
     }
-    
+
     hideDefineServiceModal();
 });
 
@@ -1161,14 +1157,14 @@ window.showEditServiceModal = function(docId) {
     document.getElementById('edit-licensePlate').value = job.licensePlate;
     document.getElementById('edit-carModel').value = job.carModel;
     document.getElementById('edit-serviceDescription').value = job.serviceDescription;
-    
+
     const mechanicSelect = document.getElementById('edit-assignedMechanic');
     mechanicSelect.innerHTML = MECHANICS.map(m => `<option value="${m}">${m}</option>`).join('');
-    mechanicSelect.value = job.assignedMechanic; 
+    mechanicSelect.value = job.assignedMechanic;
 
     const willTireChange = job.statusTS === STATUS_PENDING || job.statusTS === STATUS_TS_FINISHED;
     document.querySelector(`input[name="edit-willTireChange"][value="${willTireChange ? 'Sim' : 'Nao'}"]`).checked = true;
-    
+
     // NOVO: Preenche a opção de alinhamento
     document.querySelector(`input[name="edit-willAlign"][value="${job.requiresAlignment ? 'Sim' : 'Nao'}"]`).checked = true;
 
@@ -1200,7 +1196,7 @@ document.getElementById('edit-service-form').addEventListener('submit', async (e
     if (newWillTireChange && originalJob.statusTS === null) {
         newStatusTS = STATUS_PENDING;
     } else if (!newWillTireChange && (originalJob.statusTS === STATUS_PENDING || originalJob.statusTS === null)) {
-        newStatusTS = null; 
+        newStatusTS = null;
     }
 
     const dataToUpdate = {
@@ -1215,7 +1211,7 @@ document.getElementById('edit-service-form').addEventListener('submit', async (e
         statusTS: newStatusTS,
         requiresAlignment: newRequiresAlignment // NOVO
     };
-    
+
     const alignmentDataToUpdate = {
         customerName: 'N/A',
         vendedorName: newVendedorName,
@@ -1231,12 +1227,12 @@ document.getElementById('edit-service-form').addEventListener('submit', async (e
         if (jobIndex !== -1) {
             serviceJobs[jobIndex] = { ...serviceJobs[jobIndex], ...dataToUpdate };
         }
-        
+
         const alignmentIndex = alignmentQueue.findIndex(a => a.serviceJobId === docId);
         if (alignmentIndex !== -1) {
             alignmentQueue[alignmentIndex] = { ...alignmentQueue[alignmentIndex], ...alignmentDataToUpdate };
         }
-        
+
         renderServiceQueues(serviceJobs);
         renderAlignmentMirror(alignmentQueue);
         renderAlignmentQueue(alignmentQueue);
@@ -1247,7 +1243,7 @@ document.getElementById('edit-service-form').addEventListener('submit', async (e
 
             const alignQuery = query(collection(db, ALIGNMENT_COLLECTION_PATH), where('serviceJobId', '==', docId));
             const alignSnapshot = await getDocs(alignQuery);
-            
+
             if (!alignSnapshot.empty) {
                 const alignDocRef = alignSnapshot.docs[0].ref;
                 // Se o alinhamento foi desmarcado, marca o job de alinhamento como perdido
@@ -1281,14 +1277,14 @@ document.getElementById('edit-service-form').addEventListener('submit', async (e
             }
 
                 await updateDoc(alignDocRef, alignmentDataToUpdate);
-            
+
             alertUser("Serviço atualizado com sucesso!");
         } catch (error) {
             console.error("Erro ao atualizar serviço:", error);
             alertUser("Erro ao salvar serviço no banco de dados.");
         }
     }
-    
+
     hideEditServiceModal();
 });
 
@@ -1326,7 +1322,7 @@ window.startGeneralService = startGeneralService;
 // =========================================================================
 
 async function markServiceReady(docId, serviceType) {
-    
+
     let dataToUpdate = {};
     // ATUALIZADO: Adiciona timestamp de conclusão da etapa
     if (serviceType === 'GS') {
@@ -1349,14 +1345,14 @@ async function markServiceReady(docId, serviceType) {
         const job = serviceJobs[jobIndex];
 
         const isGsReady = job.statusGS === STATUS_GS_FINISHED;
-        const isTsReady = job.statusTS === STATUS_TS_FINISHED || job.statusTS === null; 
+        const isTsReady = job.statusTS === STATUS_TS_FINISHED || job.statusTS === null;
 
         if (isGsReady && isTsReady) {
             if (job.requiresAlignment) {
                 const alignmentCarIndex = alignmentQueue.findIndex(a => a.serviceJobId === docId);
-                if (alignmentCarIndex !== -1 && alignmentQueue[alignmentCarIndex].status === STATUS_WAITING_GS) { 
+                if (alignmentCarIndex !== -1 && alignmentQueue[alignmentCarIndex].status === STATUS_WAITING_GS) {
                     alignmentQueue[alignmentCarIndex].status = STATUS_WAITING;
-                    job.status = STATUS_GS_FINISHED; 
+                    job.status = STATUS_GS_FINISHED;
                 } else {
                     job.status = STATUS_READY;
                 }
@@ -1364,7 +1360,7 @@ async function markServiceReady(docId, serviceType) {
                 job.status = STATUS_READY;
             }
         }
-        
+
         renderServiceQueues(serviceJobs);
         renderAlignmentQueue(alignmentQueue);
         renderAlignmentMirror(alignmentQueue);
@@ -1378,7 +1374,7 @@ async function markServiceReady(docId, serviceType) {
 
         const serviceDoc = await getDoc(serviceDocRef);
         if (!serviceDoc.exists()) throw new Error("Documento de Serviço não encontrado.");
-        
+
         const job = serviceDoc.data();
         const isGsReady = job.statusGS === STATUS_GS_FINISHED;
         const isTsReady = job.statusTS === STATUS_TS_FINISHED || job.statusTS === null;
@@ -1411,10 +1407,10 @@ async function markServiceReady(docId, serviceType) {
 
 async function finalizeJob(docId, collectionType) {
     if (currentUserRole !== MANAGER_ROLE) return alertUser("Acesso negado. Apenas Gerentes podem finalizar pagamentos.");
-    
+
      const collectionPath = collectionType === 'service' ? SERVICE_COLLECTION_PATH : ALIGNMENT_COLLECTION_PATH;
      const isService = collectionType === 'service';
-     const finalizedTimestamp = isDemoMode ? Timestamp.fromMillis(Date.now()) : serverTimestamp(); 
+     const finalizedTimestamp = isDemoMode ? Timestamp.fromMillis(Date.now()) : serverTimestamp();
 
     if (isDemoMode) {
         let jobToUpdate = null;
@@ -1430,12 +1426,12 @@ async function finalizeJob(docId, collectionType) {
                  }
             }
         }
-        
+
         if (jobToUpdate) {
             jobToUpdate.status = STATUS_FINALIZED;
             jobToUpdate.finalizedAt = finalizedTimestamp;
         }
-        
+
         renderReadyJobs(serviceJobs, alignmentQueue);
         renderAlignmentMirror(alignmentQueue);
         renderAlignmentQueue(alignmentQueue);
@@ -1446,8 +1442,8 @@ async function finalizeJob(docId, collectionType) {
     try {
         const docRef = doc(db, collectionPath, docId);
         const dataToUpdate = { status: STATUS_FINALIZED, finalizedAt: finalizedTimestamp };
-        await updateDoc(docRef, dataToUpdate); 
-        
+        await updateDoc(docRef, dataToUpdate);
+
         if (!isService) {
             const carDoc = await getDoc(docRef);
             if (carDoc.exists() && carDoc.data().serviceJobId) {
@@ -1468,7 +1464,7 @@ async function finalizeJob(docId, collectionType) {
 async function markServiceAsLost(docId) {
     // ATUALIZAÇÃO: Permite que Vendedores também marquem como perdido.
     if (currentUserRole !== MANAGER_ROLE && currentUserRole !== VENDEDOR_ROLE) return alertUser("Acesso negado.");
-    
+
     const lostTimestamp = isDemoMode ? Timestamp.fromMillis(Date.now()) : serverTimestamp();
     const dataToUpdate = { status: STATUS_LOST, finalizedAt: lostTimestamp };
 
@@ -1478,7 +1474,7 @@ async function markServiceAsLost(docId) {
             serviceJobs[jobIndex].status = STATUS_LOST;
             serviceJobs[jobIndex].finalizedAt = lostTimestamp;
         }
-        
+
         const alignmentIndex = alignmentQueue.findIndex(a => a.serviceJobId === docId);
         if (alignmentIndex !== -1) {
             alignmentQueue[alignmentIndex].status = STATUS_LOST;
@@ -1498,12 +1494,12 @@ async function markServiceAsLost(docId) {
 
         const alignQuery = query(collection(db, ALIGNMENT_COLLECTION_PATH), where('serviceJobId', '==', docId));
         const alignSnapshot = await getDocs(alignQuery);
-        
+
         if (!alignSnapshot.empty) {
             const alignDocRef = alignSnapshot.docs[0].ref;
             await updateDoc(alignDocRef, dataToUpdate);
         }
-        
+
         alertUser("Serviço marcado como 'Perdido' e removido das filas.");
     } catch (error) {
         console.error("Erro ao marcar como perdido:", error);
@@ -1513,7 +1509,7 @@ async function markServiceAsLost(docId) {
 
 async function updateAlignmentStatus(docId, newStatus) {
     if (currentUserRole !== MANAGER_ROLE && currentUserRole !== ALIGNER_ROLE) return alertUser("Acesso negado. Faça login como Alinhador ou Gerente.");
-    
+
     let finalStatus = newStatus;
     let dataToUpdate = {};
     const now = isDemoMode ? Timestamp.fromMillis(Date.now()) : serverTimestamp();
@@ -1525,8 +1521,8 @@ async function updateAlignmentStatus(docId, newStatus) {
             readyAt: now // Timestamp de quando Alinhador apertou "Pronto"
         };
     } else if (newStatus === STATUS_ATTENDING) {
-        finalStatus = newStatus; 
-        dataToUpdate = { 
+        finalStatus = newStatus;
+        dataToUpdate = {
             status: finalStatus,
             alignmentStartedAt: now // ATUALIZADO: Gravando quando o alinhamento começou
         };
@@ -1539,11 +1535,11 @@ async function updateAlignmentStatus(docId, newStatus) {
          const carIndex = alignmentQueue.findIndex(car => car.id === docId);
          if (carIndex !== -1) {
             alignmentQueue[carIndex] = { ...alignmentQueue[carIndex], ...dataToUpdate, status: finalStatus };
-             
+
              renderAlignmentQueue(alignmentQueue);
              renderAlignmentMirror(alignmentQueue);
-             renderReadyJobs(serviceJobs, alignmentQueue); 
-             return; 
+             renderReadyJobs(serviceJobs, alignmentQueue);
+             return;
          } else {
             alertUser("Erro Demo: Carro de alinhamento não encontrado.");
          }
@@ -1562,10 +1558,10 @@ async function updateAlignmentStatus(docId, newStatus) {
 function alertUser(message) {
     const serviceError = document.getElementById('service-error');
     const alignmentError = document.getElementById('alignment-error');
-    
+
     if (serviceError) serviceError.textContent = message;
     if (alignmentError) alignmentError.textContent = message;
-    
+
     setTimeout(() => {
         if (serviceError) serviceError.textContent = isDemoMode ? "As ações não serão salvas." : '';
         if (alignmentError) alignmentError.textContent = '';
@@ -1578,26 +1574,30 @@ function alertUser(message) {
 
 function getTimestampSeconds(timestamp) {
     if (!timestamp) return 0;
-    if (typeof timestamp.seconds === 'number') return timestamp.seconds; 
+    if (typeof timestamp.seconds === 'number') return timestamp.seconds;
     if (typeof timestamp.toMillis === 'function') return timestamp.toMillis() / 1000;
     return 0;
 }
 
 // =========================================================================
+// CORREÇÃO: Função toggleDescription unificada e limpa
 function toggleDescription(jobId) {
-    const shortDesc = document.getElementById(`desc-short-${jobId}`);
-    const fullDesc = document.getElementById(`desc-full-${jobId}`);
+    const shortDescEl = document.getElementById(`desc-short-${jobId}`);
     const button = document.getElementById(`desc-btn-${jobId}`);
 
-    if (!shortDesc || !fullDesc || !button) {
+    if (!shortDescEl || !button) {
         console.error(`Elementos para o job ID '${jobId}' não encontrados.`);
         return;
     }
 
-    shortDesc.classList.toggle('hidden');
-    fullDesc.classList.toggle('hidden');
+    const isExpanded = button.getAttribute('data-expanded') === 'true';
+    const fullText = shortDescEl.getAttribute('data-full-text');
+    const shortText = shortDescEl.getAttribute('data-short-text');
 
-    button.textContent = fullDesc.classList.contains('hidden') ? 'Ver mais' : 'Ver menos';
+    // Alterna o conteúdo do parágrafo e o texto do botão
+    shortDescEl.innerHTML = isExpanded ? shortText : fullText;
+    button.textContent = isExpanded ? 'Ver mais' : 'Ver menos';
+    button.setAttribute('data-expanded', !isExpanded);
 }
 
 // Disponibiliza a função no escopo global para que o `onclick` do HTML possa encontrá-la.
@@ -1618,11 +1618,11 @@ function renderServiceQueues(jobs) {
 
     mechanicsContainer.innerHTML = '';
     tireShopList.innerHTML = '';
-    
+
     const pendingJobs = jobs.filter(job => job.status === STATUS_PENDING);
-    const isManager = currentUserRole === MANAGER_ROLE; 
+    const isManager = currentUserRole === MANAGER_ROLE;
     // ATUALIZAÇÃO: Vendedores agora também podem editar e excluir.
-    const canEditAndDelete = currentUserRole === MANAGER_ROLE || currentUserRole === VENDEDOR_ROLE; 
+    const canEditAndDelete = currentUserRole === MANAGER_ROLE || currentUserRole === VENDEDOR_ROLE;
 
     const groupedJobs = {};
     MECHANICS.forEach(m => groupedJobs[m] = []);
@@ -1663,27 +1663,30 @@ function renderServiceQueues(jobs) {
                 </div>
             ` : '';
 
-            // NOVO: Lógica para "Ver mais/Ver menos"
+            // CORREÇÃO: Lógica unificada para "Ver mais/Ver menos"
             let descriptionHTML = '';
             const descriptionText = job.serviceDescription || 'N/A';
-            if (descriptionText.length > 15) { // ATUALIZADO: Limite de 15 caracteres
+            if (descriptionText.length > 15) {
+                const shortText = `${descriptionText.substring(0, 15)}...`;
                 descriptionHTML = `
                     <div class="overflow-hidden">
-                        <p id="desc-short-${job.id}" class="text-sm ${statusColor}">${descriptionText.substring(0, 15)}...</p>
-                        <p id="desc-full-${job.id}" class="text-sm ${statusColor} hidden break-words">${descriptionText} ${statusText}</p>
-                        <button id="desc-btn-${job.id}" data-job-id="${job.id}" class="text-xs text-blue-500 hover:underline mt-1">Ver mais</button>
+                        <p id="desc-short-${job.id}" class="text-sm ${statusColor} break-words"
+                           data-full-text="${descriptionText}"
+                           data-short-text="${shortText}">${shortText}</p>
+                        <button id="desc-btn-${job.id}" data-job-id="${job.id}" data-expanded="false" class="text-xs text-blue-500 hover:underline mt-1">Ver mais</button>
                     </div>
                 `;
             } else {
-                descriptionHTML = `<p class="text-sm ${statusColor} break-words">${descriptionText} ${statusText}</p>`;
+                descriptionHTML = `<p class="text-sm ${statusColor} break-words">${descriptionText}</p>`;
             }
 
             return `
                 <li class="relative p-3 bg-white border-l-4 border-yellow-500 rounded-md shadow-sm min-h-[80px]">
-                    <div class="pr-20"> 
+                    <div class="pr-20">
                         <div>
                             <p class="font-semibold text-gray-800">${job.licensePlate} (${job.carModel})</p>
                             ${descriptionHTML}
+                            <p class="text-xs font-semibold ${statusColor} mt-1">${statusText}</p>
                         </div>
                     </div>
                     <div class="absolute top-3 right-3 flex flex-col items-end space-y-2">
@@ -1709,16 +1712,14 @@ function renderServiceQueues(jobs) {
             const statusColor = isTsPending ? 'text-red-500' : 'text-gray-500';
             const isDefined = job.isServiceDefined;
 
-            // NOVO: Trava de segurança do botão "Pronto" (Req 3.3)
             const hasStarted = !!job.gsStartedAt;
             const isReadyButtonDisabled = !isDefined || isTsPending || !hasStarted;
             const readyButtonTitle = isTsPending ? "Aguardando conclusão do serviço de pneus." : !isDefined ? "Aguardando definição do serviço." : "Marcar como pronto";
-            
+
             let descriptionHTML = '';
             let clickHandler = '';
             let cursorClass = '';
-            let actionButtonHTML = '';
-            
+
             if (!isDefined) {
                 descriptionHTML = '<span class="font-bold text-red-600">(Aguardando Definição de Serviço)</span>';
                 if (isManager) {
@@ -1727,17 +1728,20 @@ function renderServiceQueues(jobs) {
                     descriptionHTML += '<span class="text-xs text-blue-600 block mt-1">(Clique p/ definir)</span>';
                 }
             } else {
-                // NOVO: Lógica para "Ver mais/Ver menos"
+                // CORREÇÃO: Lógica unificada para "Ver mais/Ver menos"
                 const descriptionText = job.serviceDescription || 'N/A';
-                if (descriptionText.length > 15) { // ATUALIZADO: Limite de 15 caracteres
+                if (descriptionText.length > 15) {
+                    const shortText = `${descriptionText.substring(0, 15)}...`;
                     descriptionHTML = `
                         <div class="overflow-hidden">
-                            <p id="desc-short-${job.id}" class="text-sm ${statusColor}">${descriptionText.substring(0, 15)}... ${statusText}</p>
-                            <p id="desc-full-${job.id}" class="text-sm ${statusColor} hidden break-words">${descriptionText}</p>
+                            <p id="desc-short-${job.id}" class="text-sm ${statusColor} break-words"
+                               data-full-text="${descriptionText}"
+                               data-short-text="${shortText}">${shortText}</p>
+                            <button id="desc-btn-${job.id}" data-job-id="${job.id}" data-expanded="false" class="text-xs text-blue-500 hover:underline mt-1">Ver mais</button>
                         </div>
                     `;
                 } else {
-                    descriptionHTML = `<p class="text-sm ${statusColor} break-words">${descriptionText} ${statusText}</p>`;
+                    descriptionHTML = `<p class="text-sm ${statusColor} break-words">${descriptionText}</p>`;
                 }
             }
 
@@ -1760,6 +1764,7 @@ function renderServiceQueues(jobs) {
                         <div>
                             <p class="font-semibold text-gray-800">${job.licensePlate} (${job.carModel})</p>
                             ${descriptionHTML}
+                            <p class="text-xs font-semibold ${statusColor} mt-1">${statusText}</p>
                         </div>
                     </div>
                     <div class="absolute top-3 right-3 flex flex-col items-end space-y-2">
@@ -1801,23 +1806,26 @@ function renderServiceQueues(jobs) {
                 const statusText = isTsPending ? `(Aguardando Pneus)` : '';
                 const statusColor = isTsPending ? 'text-red-500' : 'text-gray-500';
                 const isDefined = job.isServiceDefined;
-                
+
                 let descriptionHTML = '';
                 if (!isDefined) {
                     descriptionHTML = '<p class="font-bold text-red-600">(Aguardando Definição de Serviço pela Gerência)</p>';
                 } else {
-                    // NOVO: Lógica para "Ver mais/Ver menos" na visão do mecânico
+                    // CORREÇÃO: Lógica unificada para "Ver mais/Ver menos"
                     const descriptionText = job.serviceDescription || 'N/A';
-                    if (descriptionText.length > 15) { // ATUALIZADO: Limite de 15 caracteres
+                    if (descriptionText.length > 15) {
+                        const shortText = `${descriptionText.substring(0, 15)}...`;
                         descriptionHTML = `
                             <div class="overflow-hidden">
-                                <p id="desc-short-${job.id}" class="text-sm ${statusColor}">${descriptionText.substring(0, 15)}... ${statusText}</p>
-                                <p id="desc-full-${job.id}" class="text-sm ${statusColor} hidden break-words">${descriptionText}</p>
-                                <button id="desc-btn-${job.id}" onclick="window.toggleDescription('${job.id}')" class="text-xs text-blue-500 hover:underline mt-1">Ver mais</button>
+                                <p id="desc-short-${job.id}" class="text-sm ${statusColor} break-words"
+                                   data-full-text="${descriptionText}"
+                                   data-short-text="${shortText}">${shortText}</p>
+                                <button id="desc-btn-${job.id}" data-job-id="${job.id}" data-expanded="false"
+                                        class="text-xs text-blue-500 hover:underline mt-1">Ver mais</button>
                             </div>
                         `;
                     } else {
-                        descriptionHTML = `<p class="text-sm ${statusColor} break-words">${descriptionText} ${statusText}</p>`;
+                        descriptionHTML = `<p class="text-sm ${statusColor} break-words">${descriptionText}</p>`;
                     }
                 }
 
@@ -1828,7 +1836,7 @@ function renderServiceQueues(jobs) {
                                 <p class="text-lg font-bold text-gray-800">${job.licensePlate}</p>
                                 <p class="text-md text-gray-600 mb-2">${job.carModel}</p>
                                 ${descriptionHTML}
-                                <p class="text-xs text-gray-400 mt-1">Vendedor: ${job.vendedorName}</p>
+                                <p class="text-xs text-gray-400 mt-1">Vendedor: ${job.vendedorName} <span class="font-semibold ${statusColor}">${statusText}</span></p>
                             </div>
                         </div>
                         <div class="absolute top-4 right-4">
@@ -1843,7 +1851,7 @@ function renderServiceQueues(jobs) {
             }).join('');
             mechanicViewHTML += `</ul>`;
         } else {
-            mechanicViewHTML += ` 
+            mechanicViewHTML += `
                 <div class="text-center p-10 bg-white rounded-lg shadow-md border">
                     <p class="text-2xl mb-2"></p>
                     <p class="text-lg font-medium text-gray-700">Nenhum carro na sua fila no momento.</p>
@@ -1853,40 +1861,51 @@ function renderServiceQueues(jobs) {
         }
         mechanicViewContainer.innerHTML = mechanicViewHTML;
     }
+
+    // CORREÇÃO: Adiciona os event listeners para TODOS os botões "Ver mais" após a renderização.
+    // Isso garante que os botões funcionem em todas as visões.
+    document.querySelectorAll('button[data-job-id]').forEach(button => {
+        const jobId = button.getAttribute('data-job-id');
+        // Remove listener antigo para evitar duplicação
+        const newButton = button.cloneNode(true);
+        button.parentNode.replaceChild(newButton, button);
+        // Adiciona o novo listener
+        newButton.addEventListener('click', () => toggleDescription(jobId));
+    });
 }
 
 function getSortedAlignmentQueue() {
-     const activeCars = alignmentQueue.filter(car => 
-        car.status === STATUS_WAITING || 
+     const activeCars = alignmentQueue.filter(car =>
+        car.status === STATUS_WAITING ||
         car.status === STATUS_ATTENDING ||
         car.status === STATUS_WAITING_GS
     );
-    
+
     activeCars.sort((a, b) => {
         const getPriority = (status) => {
             if (status === STATUS_ATTENDING) return 1;
             if (status === STATUS_WAITING) return 2;
             if (status === STATUS_WAITING_GS) return 3;
-            return 4; 
+            return 4;
         };
         const priorityA = getPriority(a.status);
         const priorityB = getPriority(b.status);
-        
+
         if (priorityA !== priorityB) return priorityA - priorityB;
-        
+
         return getTimestampSeconds(a.timestamp) - getTimestampSeconds(b.timestamp);
     });
     return activeCars;
 }
 
-function renderAlignmentMirror(cars) { 
+function renderAlignmentMirror(cars) {
     const mirrorContainer = document.getElementById('alignment-mirror');
-    if (!mirrorContainer) return; 
-    
-    const activeCars = getSortedAlignmentQueue(); 
+    if (!mirrorContainer) return;
+
+    const activeCars = getSortedAlignmentQueue();
 
     let mirrorHTML = '';
-    
+
     if (activeCars.length === 0) {
          mirrorHTML = '<p class="text-sm text-gray-500 italic p-3 text-center">Fila de Alinhamento vazia. </p>';
     } else {
@@ -1896,18 +1915,18 @@ function renderAlignmentMirror(cars) {
                     const isWaitingGS = car.status === STATUS_WAITING_GS;
                     const isAttending = car.status === STATUS_ATTENDING;
 
-                    const statusClass = isAttending ? 'bg-yellow-100 text-yellow-800' : 
-                                        isWaitingGS ? 'bg-red-100 text-red-800' : 
+                    const statusClass = isAttending ? 'bg-yellow-100 text-yellow-800' :
+                                        isWaitingGS ? 'bg-red-100 text-red-800' :
                                         'bg-blue-100 text-blue-800';
 
-                    const gsDescriptionShort = (car.gsDescription && car.gsDescription !== "Avaliação") 
-                        ? car.gsDescription.substring(0, 20) + '...' 
+                    const gsDescriptionShort = (car.gsDescription && car.gsDescription !== "Avaliação")
+                        ? car.gsDescription.substring(0, 20) + '...'
                         : 'Avaliação...';
-                        
-                    const statusText = isAttending ? 'Em Atendimento' : 
-                                       isWaitingGS ? `Aguardando GS (${gsDescriptionShort})` : 
+
+                    const statusText = isAttending ? 'Em Atendimento' :
+                                       isWaitingGS ? `Aguardando GS (${gsDescriptionShort})` :
                                        'Disponível';
-                    
+
                     return `
                         <li class="p-3 bg-white rounded-md border border-gray-200 shadow-sm flex justify-between items-center text-sm">
                             <span class="font-semibold">${index + 1}. ${car.carModel} (${car.licensePlate})</span>
@@ -1925,16 +1944,16 @@ function renderAlignmentMirror(cars) {
 }
 
 
-function renderAlignmentQueue(cars) { 
+function renderAlignmentQueue(cars) {
     const tableContainer = document.getElementById('alignment-table-container');
     const emptyMessage = document.getElementById('alignment-empty-message');
-    
+
     if (!tableContainer || !emptyMessage) {
          console.error("Erro: Elementos da UI de alinhamento não encontrados.");
          return;
     }
 
-    const activeCars = getSortedAlignmentQueue(); 
+    const activeCars = getSortedAlignmentQueue();
 
     if (activeCars.length === 0) {
         tableContainer.innerHTML = '';
@@ -1959,7 +1978,7 @@ function renderAlignmentQueue(cars) {
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
     `;
-    
+
     const nextCarIndex = activeCars.findIndex(c => c.status === STATUS_WAITING);
 
     activeCars.forEach((car, index) => {
@@ -1967,23 +1986,23 @@ function renderAlignmentQueue(cars) {
         const isWaiting = car.status === STATUS_WAITING;
         const isAttending = car.status === STATUS_ATTENDING;
         const isWaitingGS = car.status === STATUS_WAITING_GS;
-        
-        const statusColor = isAttending ? 'bg-yellow-100 text-yellow-800' : 
-                            isWaitingGS ? 'bg-red-100 text-red-800' : 
+
+        const statusColor = isAttending ? 'bg-yellow-100 text-yellow-800' :
+                            isWaitingGS ? 'bg-red-100 text-red-800' :
                             'bg-blue-100 text-blue-800';
 
-        const gsDescriptionShort = (car.gsDescription && car.gsDescription !== "Avaliação") 
-            ? car.gsDescription.substring(0, 25) + '...' 
+        const gsDescriptionShort = (car.gsDescription && car.gsDescription !== "Avaliação")
+            ? car.gsDescription.substring(0, 25) + '...'
             : 'Avaliação...';
-            
-        const statusText = isAttending ? 'Em Atendimento' : 
-                           isWaitingGS ? `Aguardando GS: ${gsDescriptionShort}` : 
+
+        const statusText = isAttending ? 'Em Atendimento' :
+                           isWaitingGS ? `Aguardando GS: ${gsDescriptionShort}` :
                            'Disponível para Alinhar';
 
         const rowClass = isWaitingGS ? 'bg-red-50/50' : (isNextWaiting ? 'bg-yellow-50/50' : '');
 
         let moverButtons = '';
-        const canMove = currentUserRole === MANAGER_ROLE && isWaiting; 
+        const canMove = currentUserRole === MANAGER_ROLE && isWaiting;
 
         const waitingOnlyList = activeCars.filter(c => c.status === STATUS_WAITING);
         const waitingIndex = waitingOnlyList.findIndex(c => c.id === car.id);
@@ -2016,7 +2035,7 @@ function renderAlignmentQueue(cars) {
                     Pronto
                 </button>
             `;
-        } else if (isNextWaiting) { 
+        } else if (isNextWaiting) {
             actions = `
                 <button onclick="updateAlignmentStatus('${car.id}', '${STATUS_ATTENDING}')"
                     class="text-xs font-medium bg-yellow-500 text-gray-900 py-1 px-3 rounded-lg hover:bg-yellow-600 transition min-w-[120px]"
@@ -2072,10 +2091,10 @@ function renderReadyJobs(serviceJobs, alignmentQueue) {
     const readyServiceJobs = serviceJobs
         .filter(job => job.status === STATUS_READY)
         .map(job => ({ ...job, source: 'service', sortTimestamp: getTimestampSeconds(job.timestamp) }));
-    
+
     const readyAlignmentJobs = alignmentQueue
         .filter(car => car.status === STATUS_READY)
-        .map(car => ({ ...car, source: 'alignment', sortTimestamp: getTimestampSeconds(car.readyAt) })); 
+        .map(car => ({ ...car, source: 'alignment', sortTimestamp: getTimestampSeconds(car.readyAt) }));
 
     const readyJobs = [...readyServiceJobs, ...readyAlignmentJobs];
     readyJobs.sort((a, b) => a.sortTimestamp - b.sortTimestamp);
@@ -2108,7 +2127,7 @@ function renderReadyJobs(serviceJobs, alignmentQueue) {
                 const isService = job.source === 'service';
                 const serviceInfo = isService ? job.assignedMechanic : ALIGNMENT_MECHANIC;
                 const serviceDetail = isService ? job.serviceDescription.substring(0, 50) + '...' : 'Revisão de Geometria/Balanceamento';
-                const readyTimestamp = job.readyAt || job.timestamp; 
+                const readyTimestamp = job.readyAt || job.timestamp;
                 const readyTime = new Date(getTimestampSeconds(readyTimestamp) * 1000).toLocaleTimeString('pt-BR');
 
 
@@ -2176,7 +2195,7 @@ function renderReadyJobs(serviceJobs, alignmentQueue) {
             if (hours > 0) return `${hours}h ${minutes}min`;
             return `${minutes} min`;
         }
-        
+
         function formatTime(timestamp) {
             if (!timestamp) return '--';
             const date = new Date(getTimestampSeconds(timestamp) * 1000);
@@ -2251,11 +2270,11 @@ function renderReadyJobs(serviceJobs, alignmentQueue) {
          * NOVO: Calcula e renderiza todo o Dashboard de Desempenho (Req 2.x e 3.x)
          */
         function calculateAndRenderDashboard() {
-            
+
             // =================================================================
             // ETAPA 1: Coletar e Processar Dados do Dia
             // =================================================================
-            
+
             // ATUALIZAÇÃO: Chama as novas funções de renderização operacional
             renderPendingCounts();
             renderDailySummary();
@@ -2271,7 +2290,7 @@ function renderReadyJobs(serviceJobs, alignmentQueue) {
 
             const detailedHistoryList = [];
             const lostHistoryList = []; // NOVO: Para histórico de perdas
-            
+
             // Inicializa stats para todos os mecânicos, incluindo os fixos e os do DB
             let mechanicStats = {};
             [...MECHANICS, TIRE_SHOP_MECHANIC, ALIGNMENT_MECHANIC].forEach(m => {
@@ -2288,7 +2307,7 @@ function renderReadyJobs(serviceJobs, alignmentQueue) {
             allServicesToday.filter(j => j.status === STATUS_FINALIZED).forEach(job => {
                 const totalDurationMs = calculateDuration(job.timestamp, job.finalizedAt);
                 const mechanic = job.assignedMechanic;
-                
+
                 const etapas = ['Serviço Geral'];
                 const mecsEnvolvidos = [mechanic];
 
@@ -2298,7 +2317,7 @@ function renderReadyJobs(serviceJobs, alignmentQueue) {
                 const tsDurationMs = calculateDuration(job.tsStartedAt, job.tsFinishedAt); // tsStartedAt precisa ser adicionado
                 if (waitTimeMs > 0) allWaitTimes.push(waitTimeMs);
                 if (gsDurationMs > 0) allGsDurations.push(gsDurationMs);
-                
+
                 // Adiciona stats do Mecânico Geral
                 if (mechanicStats[mechanic]) {
                     mechanicStats[mechanic].count++;
@@ -2324,7 +2343,7 @@ function renderReadyJobs(serviceJobs, alignmentQueue) {
                     if (aliJob) {
                         etapas.push('Alinhamento');
                         mecsEnvolvidos.push(ALIGNMENT_MECHANIC);
-                        
+
                         aliDurationMs = calculateDuration(aliJob.alignmentStartedAt, aliJob.readyAt);
                         if (aliDurationMs > 0) allAliDurations.push(aliDurationMs);
 
@@ -2380,7 +2399,7 @@ function renderReadyJobs(serviceJobs, alignmentQueue) {
                 const totalDurationMs = calculateDuration(car.timestamp, car.finalizedAt);
                 const aliDurationMs = calculateDuration(car.alignmentStartedAt, car.readyAt);
                 if (aliDurationMs > 0) allAliDurations.push(aliDurationMs);
-                
+
                 if (mechanicStats[ALIGNMENT_MECHANIC]) {
                     mechanicStats[ALIGNMENT_MECHANIC].count++;
                     mechanicStats[ALIGNMENT_MECHANIC].totalDurationMs += aliDurationMs > 0 ? aliDurationMs : totalDurationMs;
@@ -2405,7 +2424,7 @@ function renderReadyJobs(serviceJobs, alignmentQueue) {
             // =================================================================
             // ETAPA 2: Calcular Métricas Agregadas (Req 5.4, 5.5)
             // =================================================================
-            
+
             // --- Desempenho por Mecânico (Req 5.4) ---
             const performanceList = [];
             Object.keys(mechanicStats).forEach(name => {
@@ -2415,18 +2434,18 @@ function renderReadyJobs(serviceJobs, alignmentQueue) {
                         name: name,
                         count: stats.count,
                         // Média calculada apenas em jobs que o mecânico foi o principal
-                        avgMs: (stats.totalDurationMs > 0) ? (stats.totalDurationMs / stats.count) : 0 
+                        avgMs: (stats.totalDurationMs > 0) ? (stats.totalDurationMs / stats.count) : 0
                     });
                 }
             });
-            
+
             // Filtra mecânicos com tempo médio > 0 para ranking de eficiência
             const eligibleForRanking = performanceList.filter(m => m.avgMs > 0);
 
             // --- Destaques (Req 5.5) ---
             let bestPerformer = { name: '--', avgStr: '--' };
             let worstPerformer = { name: '--', avgStr: '--' };
-            if (eligibleForRanking.length > 0) {                
+            if (eligibleForRanking.length > 0) {
                 // Lógica de Score: 60% peso para tempo baixo, 40% para quantidade alta.
                 const maxCount = Math.max(...eligibleForRanking.map(m => m.count), 0);
                 const maxAvgMs = Math.max(...eligibleForRanking.map(m => m.avgMs), 0);
@@ -2440,7 +2459,7 @@ function renderReadyJobs(serviceJobs, alignmentQueue) {
 
                 const sortedByScore = [...eligibleForRanking].sort((a, b) => b.score - a.score);
                 bestPerformer = { name: sortedByScore[0].name, avgStr: formatDuration(sortedByScore[0].avgMs) };
-                
+
                 const worst = sortedByScore[sortedByScore.length - 1];
                 worstPerformer = { name: worst.name, avgStr: formatDuration(worst.avgMs) };
             }
@@ -2449,7 +2468,7 @@ function renderReadyJobs(serviceJobs, alignmentQueue) {
             let fastestCar = { car: '--', avgStr: '--' };
             if (detailedHistoryList.length > 0) {
                 const sortedByDuration = [...detailedHistoryList].sort((a, b) => a.durationMs - b.durationMs);
-                
+
                 const slowest = sortedByDuration[sortedByDuration.length - 1];
                 const bottleneckInfo = slowest.bottleneck ? `Gargalo: ${slowest.bottleneck}` : '';
                 slowestCar = { car: slowest.car, avgStr: `${slowest.durationStr}` };
@@ -2472,12 +2491,12 @@ function renderReadyJobs(serviceJobs, alignmentQueue) {
             const maxGsTimeMs = allGsDurations.length > 0 ? Math.max(...allGsDurations) : 0;
             const minAliTimeMs = allAliDurations.length > 0 ? Math.min(...allAliDurations) : 0;
             const maxAliTimeMs = allAliDurations.length > 0 ? Math.max(...allAliDurations) : 0;
-            
+
 
             // =================================================================
             // ETAPA 3: Renderizar o Dashboard (Req 5.4, 5.5)
             // =================================================================
-            
+
             // Renderiza Destaques (Req 5.5)
             document.getElementById('dash-best-performer').textContent = bestPerformer.name;
             document.getElementById('dash-best-performer-avg').textContent = bestPerformer.avgStr;
@@ -2487,7 +2506,7 @@ function renderReadyJobs(serviceJobs, alignmentQueue) {
             document.getElementById('dash-slowest-car-avg').textContent = slowestCar.avgStr;
             document.getElementById('dash-fastest-car').textContent = fastestCar.car; // Corrigido
             document.getElementById('dash-fastest-car-avg').textContent = fastestCar.avgStr;
-            
+
             // Renderiza Métricas por Etapa (NOVO)
             const stageMetricsContainer = document.getElementById('dashboard-stage-metrics');
             let stageMetricsHTML = '';
@@ -2524,7 +2543,7 @@ function renderReadyJobs(serviceJobs, alignmentQueue) {
             let teamMetricsHTML = '';
             if (performanceList.length > 0) {
                 performanceList.sort((a,b) => (b.score || 0) - (a.score || 0));
-                
+
                 const roleMap = {
                     [TIRE_SHOP_MECHANIC]: 'Borracheiro',
                     [ALIGNMENT_MECHANIC]: 'Alinhador'
@@ -2592,7 +2611,7 @@ function renderReadyJobs(serviceJobs, alignmentQueue) {
             }
 
             console.log("Configurando Listeners do Firestore...");
-            
+
             const serviceQuery = query(
                 collection(db, SERVICE_COLLECTION_PATH),
                 where('status', 'in', [STATUS_PENDING, STATUS_READY, STATUS_FINALIZED, STATUS_LOST, STATUS_GS_FINISHED])
@@ -2601,15 +2620,15 @@ function renderReadyJobs(serviceJobs, alignmentQueue) {
             onSnapshot(serviceQuery, (snapshot) => {
                 console.log("Recebidos dados de Serviços Gerais:", snapshot.docs.length);
                 const jobs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                
-                serviceJobs = jobs.filter(j => 
-                    j.status === STATUS_PENDING || 
+
+                serviceJobs = jobs.filter(j =>
+                    j.status === STATUS_PENDING ||
                     j.status === STATUS_READY ||
                     j.status === STATUS_GS_FINISHED ||
                     (j.status === STATUS_FINALIZED && isTimestampFromToday(j.finalizedAt)) ||
                     (j.status === STATUS_LOST && isTimestampFromToday(j.finalizedAt))
-                ); 
-                
+                );
+
                 renderServiceQueues(serviceJobs);
                 renderReadyJobs(serviceJobs, alignmentQueue);
                 renderAlignmentQueue(alignmentQueue);
@@ -2630,18 +2649,18 @@ function renderReadyJobs(serviceJobs, alignmentQueue) {
             onSnapshot(alignmentQuery, (snapshot) => {
                 console.log("Recebidos dados de Alinhamento:", snapshot.docs.length);
                 const cars = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                
-                alignmentQueue = cars.filter(c => 
+
+                alignmentQueue = cars.filter(c =>
                     c.status === STATUS_WAITING ||
                     c.status === STATUS_ATTENDING ||
                     c.status === STATUS_WAITING_GS ||
                     c.status === STATUS_READY ||
                     (c.status === STATUS_FINALIZED && isTimestampFromToday(c.finalizedAt)) ||
                     (c.status === STATUS_LOST && isTimestampFromToday(c.finalizedAt))
-                ); 
+                );
 
                 renderAlignmentQueue(alignmentQueue);
-                renderAlignmentMirror(alignmentQueue); 
+                renderAlignmentMirror(alignmentQueue);
                 renderPendingCounts(); // Atualiza contagem de pendentes
                 renderReadyJobs(serviceJobs, alignmentQueue);
                 calculateAndRenderDashboard(); // ATUALIZADO
@@ -2662,7 +2681,7 @@ function renderReadyJobs(serviceJobs, alignmentQueue) {
                 // Filtra usuários por cargo para popular dropdowns (Req 2.5)
                 vendedores = systemUsers.filter(u => u.role === VENDEDOR_ROLE);
                 mecanicosGeral = systemUsers.filter(u => u.role === MECANICO_ROLE);
-                
+
                 // Renderiza a lista de usuários na aba Admin (Req 2.2)
                 renderUserList(systemUsers);
 
@@ -2686,19 +2705,19 @@ function renderReadyJobs(serviceJobs, alignmentQueue) {
         // 5. Funções Globais e Inicialização
         // ------------------------------------
 
-        window.markServiceReady = markServiceReady;      
+        window.markServiceReady = markServiceReady;
         window.updateAlignmentStatus = updateAlignmentStatus;
         window.moveAlignmentUp = moveAlignmentUp;
         window.moveAlignmentDown = moveAlignmentDown;
-        window.finalizeJob = finalizeJob;               
-        window.showServiceReadyConfirmation = showServiceReadyConfirmation; 
-        window.hideConfirmationModal = hideConfirmationModal;               
-        window.confirmServiceReady = confirmServiceReady;                   
-        window.showAlignmentReadyConfirmation = showAlignmentReadyConfirmation; 
-        window.confirmAlignmentReady = confirmAlignmentReady;               
-        window.showFinalizeConfirmation = showFinalizeConfirmation; 
+        window.finalizeJob = finalizeJob;
+        window.showServiceReadyConfirmation = showServiceReadyConfirmation;
+        window.hideConfirmationModal = hideConfirmationModal;
+        window.confirmServiceReady = confirmServiceReady;
+        window.showAlignmentReadyConfirmation = showAlignmentReadyConfirmation;
+        window.confirmAlignmentReady = confirmAlignmentReady;
+        window.showFinalizeConfirmation = showFinalizeConfirmation;
         window.confirmFinalizeJob = confirmFinalizeJob;
-        window.confirmMarkAsLost = confirmMarkAsLost; 
+        window.confirmMarkAsLost = confirmMarkAsLost;
         window.showDefineServiceModal = showDefineServiceModal;
         window.hideDefineServiceModal = hideDefineServiceModal;
         window.showEditServiceModal = showEditServiceModal;

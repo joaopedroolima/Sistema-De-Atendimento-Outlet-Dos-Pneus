@@ -12,13 +12,13 @@ const LOCAL_APP_ID = 'local-autocenter-app';
 const appId = isCanvasEnvironment ? (typeof __app_id !== 'undefined' ? __app_id : LOCAL_APP_ID) : LOCAL_APP_ID;
 
 const LOCAL_FIREBASE_CONFIG = {
-    apiKey: "AIzaSyASPbbCpk4A2ZM_imbgoWixsFyMXYrCvQU",
-    authDomain: "atendimentosoutlet.firebaseapp.com",
-    projectId: "atendimentosoutlet",
-    storageBucket: "atendimentosoutlet.firebasestorage.app",
-    messagingSenderId: "815053643953",
-    appId: "1:815053643953:web:dbf29a57abaa869d1cc290",
-    measurementId: "G-JZ7B6ZBGYJ"
+    apiKey: "AIzaSyDleQ5Y1-o7Uoo3zOXKIm35KljdxJuxvWo",
+    authDomain: "banco-de-dados-outlet2-0.firebaseapp.com",
+    projectId: "banco-de-dados-outlet2-0",
+    storageBucket: "banco-de-dados-outlet2-0.firebasestorage.app",
+    messagingSenderId: "917605669915",
+    appId: "1:917605669915:web:6a9ee233227cfd250bacbe",
+    measurementId: "G-5SZ5F2WKXD"
 };
 
 let firebaseConfig = {};

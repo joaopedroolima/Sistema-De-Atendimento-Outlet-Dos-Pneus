@@ -79,6 +79,7 @@ let aliIdCounter = 200;
 let currentJobToDefineId = null;
 let currentJobToEditId = null;
 let currentJobToConfirm = { id: null, type: null, confirmAction: null, serviceType: null };
+let currentAlignmentJobForRework = null; // NOVO: Para o modal de retorno
 let currentUserToEditId = null; // NOVO: Para edição de usuário
 let lastAssignedMechanicIndex = -1; // NOVO: Para o rodízio de mecânicos (Req 3.1)
 
@@ -101,6 +102,7 @@ const STATUS_LOST = 'Perdido';
 // STATUS DE SERVIÇO GERAL (GS)
 const STATUS_GS_FINISHED = 'Serviço Geral Concluído';
 const STATUS_TS_FINISHED = 'Serviço Pneus Concluído';
+const STATUS_REWORK = 'Em Retrabalho'; // NOVO: Para serviços que voltam do alinhamento
 
 // STATUS DE ALINHAMENTO
 const STATUS_WAITING_GS = 'Aguardando Serviço Geral';
@@ -214,6 +216,7 @@ function postLoginSetup(user) {
     renderAlignmentQueue(alignmentQueue);
     renderAlignmentMirror(alignmentQueue);
     renderReadyJobs(serviceJobs, alignmentQueue);
+    createReworkModal(); // NOVO: Garante que o modal de retorno exista
     calculateAndRenderDashboard(); // ATUALIZADO: Chamando o novo dashboard
 }
 
@@ -848,6 +851,9 @@ document.getElementById("confirm-button").addEventListener("click", () => {
     if (confirmAction === "finalize") confirmFinalizeJob();
     if (confirmAction === "markAsLost") confirmMarkAsLost();
     if (confirmAction === "deleteUser") confirmDeleteUser(); // NOVO: Confirmação de exclusão de usuário
+    if (confirmAction === "discardAlignment") confirmDiscardAlignment(); // NOVO
+    if (confirmAction === "finalizeAlignmentFromRework") confirmFinalizeAlignmentFromRework(); // NOVO
+
     if (confirmAction === "updateUser") handleUpdateUser(); // NOVO: Confirmação de edição de usuário
 });
 
@@ -878,6 +884,8 @@ function showFinalizeModal(id, type, title, message, confirmAction) {
     if (confirmAction === 'finalize') confirmButton.textContent = 'Sim, Finalizar e Receber';
     else if (confirmAction === 'markAsLost') confirmButton.textContent = 'Sim, Marcar como Perdido';
     else if (confirmAction === 'deleteUser') confirmButton.textContent = 'Sim, Excluir Usuário';
+    else if (confirmAction === 'discardAlignment') confirmButton.textContent = 'Sim, Descartar'; // NOVO
+    else if (confirmAction === 'finalizeAlignmentFromRework') confirmButton.textContent = 'Sim, Finalizar'; // NOVO
     else confirmButton.textContent = 'Sim, Confirmar';
 
 
@@ -922,6 +930,17 @@ window.showMarkAsLostConfirmation = function(docId) {
     const message = `Tem certeza que deseja marcar este serviço como **PERDIDO**? Ele será removido das filas ativas e contado nas estatísticas de perdas. Esta ação não pode ser desfeita.`;
 
      showFinalizeModal(docId, 'service', title, message, 'markAsLost');
+}
+
+// NOVO: Modal de confirmação para descartar item do alinhamento
+window.showDiscardAlignmentConfirmation = function(docId) {
+    if (currentUserRole !== MANAGER_ROLE && currentUserRole !== ALIGNER_ROLE) return alertUser("Acesso negado.");
+
+    const car = alignmentQueue.find(c => c.id === docId);
+    if (!car) return;
+    const title = 'Descartar Serviço de Alinhamento';
+    const message = `Tem certeza que deseja marcar o alinhamento do carro <strong>${car.licensePlate}</strong> como 'Perdido'? Ele será removido da fila ativa.`;
+    showFinalizeModal(docId, 'alignment', title, message, 'discardAlignment');
 }
 
 // NOVO: Modal de confirmação para deletar usuário (Req 2.3)
@@ -978,12 +997,160 @@ window.confirmMarkAsLost = function() {
     hideConfirmationModal();
 }
 
+// NOVO: Ação de descartar alinhamento
+window.confirmDiscardAlignment = function() {
+    if (currentJobToConfirm.id && currentJobToConfirm.confirmAction === 'discardAlignment') {
+        discardAlignmentJob(currentJobToConfirm.id);
+    }
+    hideConfirmationModal();
+}
+
+// NOVO: Ação de finalizar direto do modal de retrabalho
+window.confirmFinalizeAlignmentFromRework = function() {
+    if (currentJobToConfirm.id && currentJobToConfirm.confirmAction === 'finalizeAlignmentFromRework') {
+        // CORREÇÃO: Marca o alinhamento como 'Pronto' primeiro, para que ele apareça na fila de pagamento.
+        updateAlignmentStatus(currentJobToConfirm.id, 'Done');
+
+        // NOVO: Também marca o serviço geral associado como 'Pronto para Pagamento'.
+        const alignmentJob = alignmentQueue.find(c => c.id === currentJobToConfirm.id);
+        if (alignmentJob && alignmentJob.serviceJobId) {
+            const serviceDocRef = doc(db, SERVICE_COLLECTION_PATH, alignmentJob.serviceJobId);
+            updateDoc(serviceDocRef, {
+                status: STATUS_READY
+            }).catch(e => console.error("Erro ao finalizar serviço geral associado:", e));
+        }
+
+        hideConfirmationModal();
+    } else {
+        hideConfirmationModal();
+    }
+}
+
 // NOVO: Ação de deletar usuário (Req 2.3)
 window.confirmDeleteUser = function() {
     if (currentJobToConfirm.id && currentJobToConfirm.confirmAction === 'deleteUser') {
         deleteUser(currentJobToConfirm.id);
     }
     hideConfirmationModal();
+}
+
+// =========================================================================
+// NOVO: Funções do Modal "Retornar ao Mecânico"
+// =========================================================================
+
+function createReworkModal() {
+    // CORREÇÃO: Se o modal já existe, apenas garante que os listeners estão corretos.
+    if (document.getElementById('rework-modal')) {
+        document.getElementById('rework-form').addEventListener('submit', handleReturnToMechanic);
+        return;
+    }
+
+    // NOVO: Ícone para o modal
+    const reworkIcon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-blue-500 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1"><path stroke-linecap="round" stroke-linejoin="round" d="M11 15l-3-3m0 0l3-3m-3 3h8M3 12a9 9 0 1118 0 9 9 0 01-18 0z" /></svg>`;
+    const modalHTML = `
+        <div id="rework-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
+            <div class="relative top-20 mx-auto p-5 border w-full max-w-md shadow-lg rounded-md bg-white">
+                <div class="mt-3 text-center">
+                    ${reworkIcon}
+                    <h3 class="text-xl leading-6 font-bold text-gray-900 mt-2" id="rework-modal-title">Retornar Serviço</h3>
+                    <p class="text-sm text-gray-500 mt-2" id="rework-modal-subtitle">Envie o serviço de volta para a mecânica para um ajuste ou retrabalho.</p>
+                    <form id="rework-form" class="mt-4 space-y-4 text-left">
+                        <div>
+                            <label for="rework-mechanic-select" class="block text-sm font-medium text-gray-700">Selecione o Mecânico de Destino *</label>
+                            <select id="rework-mechanic-select" required class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
+                                <!-- Options will be populated by JS -->
+                            </select>
+                        </div>
+                        <div class="pt-2">
+                            <label class="block text-sm font-medium text-gray-700">Voltar para o Alinhamento após o reparo?</label>
+                            <div class="mt-2 flex items-center space-x-4">
+                                <label class="inline-flex items-center">
+                                    <input type="radio" class="form-radio h-4 w-4 text-indigo-600" name="rework-return-to-alignment" value="Sim" checked>
+                                    <span class="ml-2">Sim</span>
+                                </label>
+                                <label class="inline-flex items-center">
+                                    <input type="radio" class="form-radio h-4 w-4 text-indigo-600" name="rework-return-to-alignment" value="Nao">
+                                    <span class="ml-2">Não</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="items-center px-4 py-3 bg-gray-50 rounded-b-md -mx-5 -mb-5 mt-6 flex justify-end space-x-3">
+                            <button id="rework-finalize-button" type="button" class="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-md shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
+                                Finalizar e Enviar ao Gerente
+                            </button>
+                            <button id="rework-confirm-button" type="submit" class="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                                Retornar ao Mecânico
+                            </button>
+                             <button id="rework-cancel-button" type="button" onclick="hideReturnToMechanicModal()" class="px-4 py-2 bg-gray-200 text-gray-800 text-sm font-medium rounded-md shadow-sm hover:bg-gray-300">
+                                Cancelar
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+    // CORREÇÃO: Garante que os listeners sejam adicionados uma única vez, após a criação do modal.
+    // Isso evita problemas de botões não funcionais.
+    const reworkForm = document.getElementById('rework-form');
+    if (reworkForm.dataset.listenerAttached) return; // Previne adicionar listeners múltiplos
+
+    reworkForm.dataset.listenerAttached = 'true';
+    document.getElementById('rework-form').addEventListener('submit', handleReturnToMechanic);
+    document.getElementById('rework-finalize-button').addEventListener('click', () => {
+        if (!currentAlignmentJobForRework) return;
+        hideReturnToMechanicModal();
+        const car = alignmentQueue.find(c => c.id === currentAlignmentJobForRework);
+        if (!car) return;
+
+        const title = 'Finalizar Serviço de Alinhamento';
+        const message = `Deseja finalizar o serviço do carro <strong>${car.licensePlate}</strong> sem retrabalho e enviá-lo para pagamento?`;
+        showFinalizeModal(currentAlignmentJobForRework, 'alignment', title, message, 'finalizeAlignmentFromRework');
+    });
+}
+
+window.showReturnToMechanicModal = function(docId) {
+    if (currentUserRole !== MANAGER_ROLE && currentUserRole !== ALIGNER_ROLE) return alertUser("Acesso negado.");
+
+    const car = alignmentQueue.find(c => c.id === docId);
+    if (!car) return alertUser("Erro: Carro não encontrado na fila de alinhamento.");
+    if (!car.serviceJobId) return alertUser("Ação não permitida: Este serviço foi adicionado manualmente e não pode retornar a um mecânico.");
+
+    currentAlignmentJobForRework = docId;
+
+    const select = document.getElementById('rework-mechanic-select');
+    select.innerHTML = mecanicosGeral.map(m => `<option value="${m.username}">${m.username}</option>`).join('');
+
+    // NOVO: Atualiza o título do modal com as informações do carro
+    document.getElementById('rework-modal-subtitle').textContent = `Carro: ${car.carModel} (${car.licensePlate})`;
+
+    document.getElementById('rework-modal').classList.remove('hidden');
+}
+
+window.hideReturnToMechanicModal = function() {
+    document.getElementById('rework-modal').classList.add('hidden');
+    document.getElementById('rework-form').reset();
+    currentAlignmentJobForRework = null;
+}
+
+async function handleReturnToMechanic(e) {
+    e.preventDefault();
+    const docId = currentAlignmentJobForRework;
+    if (!docId) return;
+
+    const targetMechanic = document.getElementById('rework-mechanic-select').value;
+    const shouldReturnToAlignment = document.querySelector('input[name="rework-return-to-alignment"]:checked').value === 'Sim';
+
+    if (!targetMechanic) {
+        alertUser("Por favor, selecione um mecânico de destino.");
+        return;
+    }
+
+    await returnToMechanic(docId, targetMechanic, shouldReturnToAlignment);
+
+    hideReturnToMechanicModal();
 }
 
 // =========================================================================
@@ -1379,6 +1546,28 @@ async function markServiceReady(docId, serviceType) {
         const isGsReady = job.statusGS === STATUS_GS_FINISHED;
         const isTsReady = job.statusTS === STATUS_TS_FINISHED || job.statusTS === null;
 
+        // NOVO: Lógica para retrabalho que precisa voltar ao alinhamento
+        // CORREÇÃO: Lógica para retrabalho que precisa voltar ao alinhamento
+        if (job.statusGS === STATUS_GS_FINISHED && job.requiresAlignmentAfterRework) {
+            // CORREÇÃO: Busca o job de alinhamento pelo ID do serviço, independentemente do status atual,
+            // para garantir que ele seja encontrado mesmo se estiver como 'Perdido'.
+            // Busca o job de alinhamento associado, mesmo que esteja 'Perdido'
+            const alignQuery = query(
+                collection(db, ALIGNMENT_COLLECTION_PATH), where('serviceJobId', '==', docId)
+            );
+            const alignSnapshot = await getDocs(alignQuery);
+            if (!alignSnapshot.empty) {
+                const alignDocRef = alignSnapshot.docs[0].ref;
+                // Reativa o job de alinhamento, colocando-o de volta na fila de espera.
+                await updateDoc(alignDocRef, { status: STATUS_WAITING, timestamp: serverTimestamp() });
+                await updateDoc(alignDocRef, { status: STATUS_WAITING, timestamp: serverTimestamp(), readyAt: null, finalizedAt: null });
+                // Reseta o status do serviço geral para indicar que aguarda o novo alinhamento.
+                await updateDoc(serviceDocRef, { status: STATUS_GS_FINISHED, requiresAlignmentAfterRework: false });
+                return; // Encerra a função aqui, pois o fluxo é diferente.
+            }
+        }
+
+
         if (isGsReady && isTsReady) {
             if (job.requiresAlignment) {
                 const alignQuery = query(
@@ -1555,6 +1744,79 @@ async function updateAlignmentStatus(docId, newStatus) {
     }
 }
 
+// NOVO: Marca um job de alinhamento como perdido
+async function discardAlignmentJob(docId) {
+    if (currentUserRole !== MANAGER_ROLE && currentUserRole !== ALIGNER_ROLE) return alertUser("Acesso negado.");
+
+    const dataToUpdate = {
+        status: STATUS_LOST,
+        finalizedAt: isDemoMode ? Timestamp.fromMillis(Date.now()) : serverTimestamp()
+    };
+
+    if (isDemoMode) {
+        const carIndex = alignmentQueue.findIndex(c => c.id === docId);
+        if (carIndex !== -1) {
+            alignmentQueue[carIndex].status = STATUS_LOST;
+        }
+    } else {
+        try {
+            const docRef = doc(db, ALIGNMENT_COLLECTION_PATH, docId);
+            await updateDoc(docRef, dataToUpdate);
+            alertUser("Serviço de alinhamento marcado como 'Perdido'.");
+        } catch (error) {
+            console.error("Erro ao descartar alinhamento:", error);
+            alertUser("Erro ao atualizar o status no banco de dados.");
+        }
+    }
+}
+
+// NOVO: Lógica para retornar um serviço ao mecânico
+async function returnToMechanic(alignmentDocId, targetMechanic, shouldReturnToAlignment) {
+    const alignmentJob = alignmentQueue.find(c => c.id === alignmentDocId);
+    if (!alignmentJob || !alignmentJob.serviceJobId) return;
+
+    const serviceJobId = alignmentJob.serviceJobId;
+
+    // 1. Atualiza o serviço principal (Geral)
+    const serviceUpdate = {
+        status: STATUS_PENDING, // Volta para a fila ativa
+        statusGS: STATUS_REWORK, // Status especial de retrabalho
+        assignedMechanic: targetMechanic, // Novo mecânico
+        requiresAlignmentAfterRework: shouldReturnToAlignment, // Guarda a decisão
+        reworkRequestedBy: currentUserName,
+        reworkRequestedAt: serverTimestamp()
+    };
+
+    // 2. Marca o job de alinhamento como "perdido" para removê-lo da fila
+    const alignmentUpdate = { status: STATUS_LOST };
+
+    if (isDemoMode) {
+        const serviceJobIndex = serviceJobs.findIndex(j => j.id === serviceJobId);
+        if (serviceJobIndex !== -1) {
+            serviceJobs[serviceJobIndex] = { ...serviceJobs[serviceJobIndex], ...serviceUpdate };
+        }
+        const alignmentJobIndex = alignmentQueue.findIndex(c => c.id === alignmentDocId);
+        if (alignmentJobIndex !== -1) {
+            alignmentQueue[alignmentJobIndex].status = STATUS_LOST;
+        }
+        alertUser(`MODO DEMO: Serviço retornado para ${targetMechanic}.`);
+    } else {
+        try {
+            // Atualiza os dois documentos
+            const serviceDocRef = doc(db, SERVICE_COLLECTION_PATH, serviceJobId);
+            await updateDoc(serviceDocRef, serviceUpdate);
+
+            const alignmentDocRef = doc(db, ALIGNMENT_COLLECTION_PATH, alignmentDocId);
+            await updateDoc(alignmentDocRef, alignmentUpdate);
+
+            alertUser(`Serviço do carro ${alignmentJob.licensePlate} retornado para ${targetMechanic}.`);
+        } catch (error) {
+            console.error("Erro ao retornar serviço para o mecânico:", error);
+            alertUser("Erro ao salvar as alterações no banco de dados.");
+        }
+    }
+}
+
 function alertUser(message) {
     const serviceError = document.getElementById('service-error');
     const alignmentError = document.getElementById('alignment-error');
@@ -1631,7 +1893,7 @@ function renderServiceQueues(jobs) {
     pendingJobs.sort((a, b) => getTimestampSeconds(a.timestamp) - getTimestampSeconds(b.timestamp));
 
     pendingJobs.forEach(job => {
-        if (job.statusGS === STATUS_PENDING && MECHANICS.includes(job.assignedMechanic)) {
+        if ((job.statusGS === STATUS_PENDING || job.statusGS === STATUS_REWORK) && MECHANICS.includes(job.assignedMechanic)) {
             groupedJobs[job.assignedMechanic].push(job);
         }
         if (job.statusTS === STATUS_PENDING && job.assignedTireShop === TIRE_SHOP_MECHANIC) {
@@ -1708,8 +1970,11 @@ function renderServiceQueues(jobs) {
     MECHANICS.forEach(mechanic => {
         const jobListHTML = groupedJobs[mechanic].map(job => {
             const isTsPending = job.statusTS === STATUS_PENDING;
-            const statusText = isTsPending ? `(Aguardando Pneus)` : '';
-            const statusColor = isTsPending ? 'text-red-500' : 'text-gray-500';
+            const isRework = job.statusGS === STATUS_REWORK; // NOVO: Verifica se é retrabalho
+
+            const statusText = isRework ? '(RETRABALHO)' : isTsPending ? `(Aguardando Pneus)` : '';
+            const statusColor = isRework ? 'text-orange-500' : isTsPending ? 'text-red-500' : 'text-gray-500';
+            const borderColor = isRework ? 'border-orange-500' : 'border-blue-500'; // NOVO: Cor da borda para retrabalho
             const isDefined = job.isServiceDefined;
 
             const hasStarted = !!job.gsStartedAt;
@@ -1759,7 +2024,7 @@ function renderServiceQueues(jobs) {
             ` : '';
 
             return `
-                <li class="relative p-3 bg-white border-l-4 border-blue-500 rounded-md shadow-sm min-h-[80px]">
+                <li class="relative p-3 bg-white border-l-4 ${borderColor} rounded-md shadow-sm min-h-[80px]">
                     <div class="pr-20 ${cursorClass}" ${clickHandler}>
                         <div>
                             <p class="font-semibold text-gray-800">${job.licensePlate} (${job.carModel})</p>
@@ -1987,6 +2252,10 @@ function renderAlignmentQueue(cars) {
         const isAttending = car.status === STATUS_ATTENDING;
         const isWaitingGS = car.status === STATUS_WAITING_GS;
 
+        // NOVO: Ícones para as novas ações (CORRIGIDO)
+        const discardIcon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>`;
+        const returnIcon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>`;
+
         const statusColor = isAttending ? 'bg-yellow-100 text-yellow-800' :
                             isWaitingGS ? 'bg-red-100 text-red-800' :
                             'bg-blue-100 text-blue-800';
@@ -2027,21 +2296,36 @@ function renderAlignmentQueue(cars) {
 
         let actions;
 
+        const reworkActions = `
+            <button onclick="showReturnToMechanicModal('${car.id}')" title="Retornar ao Mecânico" class="p-2 text-blue-600 hover:bg-blue-100 rounded-full transition">
+                ${returnIcon}
+            </button>
+            <button onclick="showDiscardAlignmentConfirmation('${car.id}')" title="Descartar / Perdido" class="p-1 text-red-600 hover:bg-red-100 rounded-full transition">
+                ${discardIcon}
+            </button>
+        `;
+
         if (isAttending) {
             actions = `
-                <button onclick="showAlignmentReadyConfirmation('${car.id}')"
-                    class="text-xs font-medium bg-green-500 text-white py-1 px-3 rounded-lg hover:bg-green-600 transition min-w-[120px]"
-                    ${!isLoggedIn ? 'disabled' : ''}>
-                    Pronto
-                </button>
+                <div class="flex items-center space-x-2">
+                    ${reworkActions}
+                    <button onclick="showAlignmentReadyConfirmation('${car.id}')"
+                        class="text-xs font-medium bg-green-500 text-white py-1 px-3 rounded-md hover:bg-green-600 transition"
+                        ${!isLoggedIn ? 'disabled' : ''}>
+                        Pronto
+                    </button>
+                </div>
             `;
         } else if (isNextWaiting) {
             actions = `
-                <button onclick="updateAlignmentStatus('${car.id}', '${STATUS_ATTENDING}')"
-                    class="text-xs font-medium bg-yellow-500 text-gray-900 py-1 px-3 rounded-lg hover:bg-yellow-600 transition min-w-[120px]"
-                    ${!isLoggedIn ? 'disabled' : ''}>
-                    Iniciar Atendimento
-                </button>
+                <div class="flex items-center space-x-2">
+                     ${reworkActions}
+                    <button onclick="updateAlignmentStatus('${car.id}', '${STATUS_ATTENDING}')"
+                        class="text-xs font-medium bg-yellow-500 text-gray-900 py-1 px-3 rounded-md hover:bg-yellow-600 transition"
+                        ${!isLoggedIn ? 'disabled' : ''}>
+                        Iniciar
+                    </button>
+                </div>
             `;
         } else {
             actions = `<span class="text-xs text-gray-400">Na fila...</span>`;
@@ -2065,9 +2349,7 @@ function renderAlignmentQueue(cars) {
                     ${moverButtons}
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <div class="flex flex-col space-y-1 sm:space-y-0 sm:space-x-2 justify-end">
-                        ${actions}
-                    </div>
+                    ${actions}
                 </td>
             </tr>
         `;
@@ -2725,6 +3007,12 @@ function renderReadyJobs(serviceJobs, alignmentQueue) {
         window.showMarkAsLostConfirmation = showMarkAsLostConfirmation;
 
         window.showDeleteUserConfirmation = showDeleteUserConfirmation; // NOVO
+        window.showDiscardAlignmentConfirmation = showDiscardAlignmentConfirmation; // NOVO
+        window.confirmDiscardAlignment = confirmDiscardAlignment; // NOVO
+        window.showReturnToMechanicModal = showReturnToMechanicModal; // NOVO
+        window.hideReturnToMechanicModal = hideReturnToMechanicModal; // NOVO
+        window.confirmFinalizeAlignmentFromRework = confirmFinalizeAlignmentFromRework; // NOVO
+
         window.showEditUserModal = showEditUserModal; // NOVO
         window.hideEditUserModal = hideEditUserModal; // NOVO
 

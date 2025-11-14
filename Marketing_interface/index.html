@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerenciador de Conteúdo de Marketing</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="bg-gray-100">
+
+    <div class="container mx-auto p-8">
+        
+        <header class="mb-8">
+            <h1 class="text-3xl font-bold text-gray-800">Gerenciador de Conteúdo de Marketing</h1>
+            <p class="text-gray-600 mt-1">Adicione, organize e gerencie as mídias que serão exibidas na interface do cliente.</p>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
+            <!-- Coluna de Cadastro (RF01, RF02) -->
+            <div class="lg:col-span-1">
+                <h2 class="text-2xl font-semibold mb-6 text-gray-800 border-b pb-2">Adicionar Nova Mídia</h2>
+                <form id="marketing-form" class="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
+                    <div class="mb-4">
+                        <label for="media-title" class="block text-sm font-medium text-gray-700">Título (Opcional)</label>
+                        <input type="text" id="media-title" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-3 border focus:ring-blue-500 focus:border-blue-500" placeholder="Ex: Promoção de Pneus">
+                    </div>
+
+                    <div class="mb-6">
+                        <label for="media-file" class="block text-sm font-medium text-gray-700">Arquivo de Mídia</label>
+                        <div class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
+                            <div class="space-y-1 text-center">
+                                <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true">
+                                    <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                                </svg>
+                                <div class="flex text-sm text-gray-600">
+                                    <label for="file-upload" class="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none">
+                                        <span>Selecione um arquivo</span>
+                                        <input id="file-upload" name="file-upload" type="file" class="sr-only" accept="image/png, image/jpeg, image/jpg, video/mp4">
+                                    </label>
+                                    <p class="pl-1">ou arraste e solte</p>
+                                </div>
+                                <p class="text-xs text-gray-500">PNG, JPG, JPEG, MP4</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="w-full py-3 px-4 border border-transparent rounded-lg shadow-md text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                        Adicionar à Fila
+                    </button>
+                    <p id="upload-message" class="mt-3 text-center text-sm font-medium"></p>
+                </form>
+            </div>
+
+            <!-- Coluna de Listagem (RF03, RF04, RF05, RF06) -->
+            <div class="lg:col-span-2">
+                <h2 class="text-2xl font-semibold mb-6 text-gray-800 border-b pb-2">Fila de Exibição</h2>
+                <div id="media-list-container" class="bg-white rounded-lg shadow-sm border border-gray-200">
+                    <p id="media-list-empty-message" class="text-gray-500 p-8 text-center italic hidden">Nenhuma mídia cadastrada ainda.</p>
+                    
+                    <ul id="media-list" class="divide-y divide-gray-200">
+                        <!-- Item de Imagem (Exemplo Estático) -->
+                        <li class="p-4 flex justify-between items-center hover:bg-gray-50 cursor-grab">
+                            <div class="flex items-center">
+                                <div class="w-24 h-16 bg-gray-200 rounded-md flex items-center justify-center mr-4">
+                                    <img src="https://via.placeholder.com/96x64.png?text=Imagem" alt="Thumbnail" class="w-full h-full object-cover rounded-md">
+                                </div>
+                                <div>
+                                    <p class="text-sm font-medium text-gray-900">promocao_alinhamento.jpg</p>
+                                    <p class="text-sm text-gray-500">Imagem</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center space-x-3">
+                                <span class="text-sm font-bold text-gray-400">#1</span>
+                                <!-- Switch Ativo/Inativo -->
+                                <div class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in">
+                                    <input type="checkbox" name="toggle" id="toggle-1" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer" checked/>
+                                    <label for="toggle-1" class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-300 cursor-pointer"></label>
+                                </div>
+                                <button title="Editar" class="p-2 text-blue-500 hover:bg-blue-100 rounded-full">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.536L16.732 3.732z" /></svg>
+                                </button>
+                                <button title="Excluir" class="p-2 text-red-500 hover:bg-red-100 rounded-full">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                </button>
+                            </div>
+                        </li>
+
+                        <!-- Item de Vídeo (Exemplo Estático) -->
+                        <li class="p-4 flex justify-between items-center hover:bg-gray-50 cursor-grab">
+                            <div class="flex items-center">
+                                <div class="w-24 h-16 bg-gray-800 text-white rounded-md flex items-center justify-center mr-4">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <p class="text-sm font-medium text-gray-900">institucional_outlet.mp4</p>
+                                    <p class="text-sm text-gray-500">Vídeo</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center space-x-3">
+                                <span class="text-sm font-bold text-gray-400">#2</span>
+                                <!-- Switch Ativo/Inativo -->
+                                <div class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in">
+                                    <input type="checkbox" name="toggle" id="toggle-2" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer"/>
+                                    <label for="toggle-2" class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-300 cursor-pointer"></label>
+                                </div>
+                                <button title="Editar" class="p-2 text-blue-500 hover:bg-blue-100 rounded-full">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.536L16.732 3.732z" /></svg>
+                                </button>
+                                <button title="Excluir" class="p-2 text-red-500 hover:bg-red-100 rounded-full">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                </button>
+                            </div>
+                        </li>
+
+                    </ul>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+    <script src="script.js" type="module"></script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+body {
+    font-family: 'Inter', sans-serif;
+}
+
+/* Estilos para o switch de Ativo/Inativo */
+.toggle-checkbox:checked {
+    right: 0;
+    border-color: #4ade80; /* green-400 */
+}
+.toggle-checkbox:checked + .toggle-label {
+    background-color: #4ade80; /* green-400 */
+}

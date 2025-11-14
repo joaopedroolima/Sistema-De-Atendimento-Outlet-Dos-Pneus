@@ -71,6 +71,10 @@
                 <button id="tab-admin" class="tab-button p-4 text-sm font-medium text-gray-600 hover:bg-gray-200 hidden" data-tab="admin">
                     Administrativo (Gerente)
                 </button>
+                <!-- NOVO: Aba Marketing -->
+                <button id="tab-marketing" class="tab-button p-4 text-sm font-medium text-gray-600 hover:bg-gray-200 hidden" data-tab="marketing_interface">
+                    Marketing (Gerente)
+                </button>
             </nav>
 
             <!-- Conteúdo das Abas -->
@@ -402,6 +406,11 @@
                     <!-- O conteúdo da fila do mecânico será renderizado aqui -->
                 </div>
 
+                <!-- NOVO: Conteúdo da Aba Marketing -->
+                <div id="marketing_interface" class="tab-content" style="padding: 0; height: 100%;">
+                    <!-- O iframe carrega o módulo de marketing de forma isolada -->
+                    <iframe src="../marketing_interface/index.html" class="w-full h-full border-0"></iframe>
+                </div>
             </main>
         </div>
     </div>

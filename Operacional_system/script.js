@@ -1559,10 +1559,14 @@ async function markServiceReady(docId, serviceType) {
             if (!alignSnapshot.empty) {
                 const alignDocRef = alignSnapshot.docs[0].ref;
                 // Reativa o job de alinhamento, colocando-o de volta na fila de espera.
-                await updateDoc(alignDocRef, { status: STATUS_WAITING, timestamp: serverTimestamp() });
                 await updateDoc(alignDocRef, { status: STATUS_WAITING, timestamp: serverTimestamp(), readyAt: null, finalizedAt: null });
                 // Reseta o status do serviço geral para indicar que aguarda o novo alinhamento.
                 await updateDoc(serviceDocRef, { status: STATUS_GS_FINISHED, requiresAlignmentAfterRework: false });
+                // Reativa o job de alinhamento, colocando-o de volta na fila de espera, e reseta o serviço geral.
+                await Promise.all([
+                    updateDoc(alignDocRef, { status: STATUS_WAITING, timestamp: serverTimestamp(), readyAt: null, finalizedAt: null }),
+                    updateDoc(serviceDocRef, { status: STATUS_GS_FINISHED, requiresAlignmentAfterRework: false })
+                ]);
                 return; // Encerra a função aqui, pois o fluxo é diferente.
             }
         }

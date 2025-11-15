@@ -1,32 +1,6 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, doc, deleteDoc, updateDoc, getDoc, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-import { getStorage, ref, uploadBytesResumable, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
-
-// --- Configuração do Firebase (copiada do sistema principal para modularidade) ---
-const firebaseConfig = {
-    apiKey: "AIzaSyDleQ5Y1-o7Uoo3zOXKIm35KljdxJuxvWo",
-    authDomain: "banco-de-dados-outlet2-0.firebaseapp.com",
-    projectId: "banco-de-dados-outlet2-0",
-    storageBucket: "banco-de-dados-outlet2-0.firebasestorage.app",
-    messagingSenderId: "917605669915",
-    appId: "1:917605669915:web:6a9ee233227cfd250bacbe",
-    measurementId: "G-5SZ5F2WKXD"
-};
-
-const app = initializeApp(firebaseConfig, "marketingApp"); // Nome exclusivo para evitar conflitos
-const db = getFirestore(app);
-const storage = getStorage(app);
-const auth = getAuth(app); // NOVO: Inicializa o serviço de autenticação
-
-// --- CORREÇÃO: Usar o mesmo padrão de caminho do sistema principal para garantir permissões ---
-const isCanvasEnvironment = typeof __app_id !== 'undefined';
-const LOCAL_APP_ID = 'local-autocenter-app';
-const appId = isCanvasEnvironment ? (typeof __app_id !== 'undefined' ? __app_id : LOCAL_APP_ID) : LOCAL_APP_ID;
-
-// Os dados devem ser armazenados dentro do caminho público do artefato.
-const MEDIA_COLLECTION = `/artifacts/${appId}/public/data/marketing_media`;
-const MEDIA_STORAGE_PATH = `artifacts/${appId}/public/media/marketing_media`;
+// --- Configuração da API (Cloudflare Worker) ---
+// IMPORTANTE: Substitua pela URL do seu Worker!
+const API_BASE_URL = 'https://marketing-api.lucasscosilva.workers.dev';
 
 // --- Elementos da UI ---
 const form = document.getElementById('marketing-form');
@@ -37,22 +11,7 @@ const mediaList = document.getElementById('media-list');
 const emptyMessage = document.getElementById('media-list-empty-message');
 const dropArea = document.getElementById('drop-area');
 const fileNameDisplay = document.getElementById('file-name-display');
-
-/**
- * NOVO: Realiza o login anônimo para obter permissões de leitura/escrita.
- */
-async function initializeAuthAndListeners() {
-    try {
-        await signInAnonymously(auth);
-        console.log("Login anônimo realizado com sucesso para a interface de Marketing.");
-        // Agora que estamos autenticados, podemos configurar os listeners.
-        setupFirestoreListener();
-    } catch (error) {
-        console.error("Erro no login anônimo:", error);
-        showUserMessage("Falha de autenticação. A aplicação pode não funcionar corretamente.", true);
-    }
-}
-
+const storageInfoDisplay = document.getElementById('storage-info-display');
 
 /**
  * Exibe uma mensagem para o usuário e a limpa após um tempo.
@@ -90,46 +49,33 @@ async function handleFormSubmit(e) {
         return;
     }
 
-    const fileName = `${Date.now()}-${file.name}`;
-    const storageRef = ref(storage, `${MEDIA_STORAGE_PATH}/${fileName}`);
-    const uploadTask = uploadBytesResumable(storageRef, file);
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('title', title);
 
-    // Listener para o progresso do upload
-    uploadTask.on('state_changed',
-        (snapshot) => {
-            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-            showUserMessage(`Enviando... ${Math.round(progress)}%`);
-        },
-        (error) => {
-            console.error("Erro no upload:", error);
-            showUserMessage(`Erro no upload: ${error.message}`, true);
-        },
-        async () => {
-            // Upload concluído com sucesso
-            try {
-                const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-                
-                // Salva os metadados no Firestore
-                await addDoc(collection(db, MEDIA_COLLECTION), {
-                    title: title || file.name,
-                    fileName: file.name,
-                    url: downloadURL,
-                    type: file.type.startsWith('image/') ? 'Imagem' : 'Vídeo',
-                    status: 'ativo', // Padrão
-                    order: Date.now(), // Ordem inicial baseada no tempo
-                    createdAt: serverTimestamp()
-                });
+    showUserMessage("Enviando...");
 
-                showUserMessage("Mídia adicionada com sucesso!");
-                form.reset();
-                updateFileDisplay(null); // Limpa o nome do arquivo da UI
+    try {
+        const response = await fetch(`${API_BASE_URL}/media`, {
+            method: 'POST',
+            body: formData,
+        });
 
-            } catch (error) {
-                console.error("Erro ao salvar no Firestore:", error);
-                showUserMessage("Erro ao salvar os dados da mídia.", true);
-            }
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Falha no upload');
         }
-    );
+
+        showUserMessage("Mídia adicionada com sucesso!");
+        form.reset();
+        updateFileDisplay(null);
+        loadInitialMedia(); // Recarrega a lista
+        updateStorageInfo(); // Atualiza o uso de espaço
+
+    } catch (error) {
+        console.error("Erro no upload:", error);
+        showUserMessage(`Erro no upload: ${error.message}`, true);
+    }
 }
 
 /**
@@ -194,33 +140,20 @@ async function handleMediaListClick(e) {
     if (!listItem) return;
 
     const mediaId = listItem.dataset.id;
-    const docRef = doc(db, MEDIA_COLLECTION, mediaId);
 
     // --- Lógica para o botão de excluir ---
     if (target.closest('button[title="Excluir"]')) {
         if (confirm("Tem certeza que deseja excluir esta mídia? Esta ação não pode ser desfeita.")) {
             try {
-                // Busca o documento para pegar a URL do arquivo antes de deletar
-                const docSnap = await getDoc(docRef);
-                if (docSnap.exists()) {
-                    const fileUrl = docSnap.data().url;
-                    // Cria uma referência para o arquivo no Storage a partir da URL
-                    const fileRef = ref(storage, fileUrl);
-                    // Deleta o arquivo do Storage
-                    await deleteObject(fileRef);
-                } else {
-                    console.warn("Documento não encontrado no Firestore, não foi possível deletar o arquivo do Storage.");
+                const response = await fetch(`${API_BASE_URL}/media/${mediaId}`, { method: 'DELETE' });
+                if (!response.ok) {
+                    throw new Error('Falha ao excluir');
                 }
-
-                // Deleta o documento do Firestore
-                await deleteDoc(docRef);
                 showUserMessage("Mídia excluída com sucesso.");
+                loadInitialMedia(); // Recarrega a lista
+                updateStorageInfo(); // Atualiza o uso de espaço
             } catch (error) {
                 console.error("Erro ao excluir mídia:", error);
-                // Informa o usuário que a exclusão do arquivo pode ter falhado
-                if (error.code === 'storage/object-not-found') {
-                    showUserMessage("Mídia excluída do banco de dados, mas o arquivo não foi encontrado no armazenamento.", true);
-                }
                 showUserMessage("Erro ao excluir a mídia.", true);
             }
         }
@@ -230,7 +163,11 @@ async function handleMediaListClick(e) {
     if (target.classList.contains('toggle-checkbox')) {
         const newStatus = target.checked ? 'ativo' : 'inativo';
         try {
-            await updateDoc(docRef, { status: newStatus });
+            await fetch(`${API_BASE_URL}/media/${mediaId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: newStatus })
+            });
             showUserMessage(`Status atualizado para ${newStatus}.`);
         } catch (error) {
             console.error("Erro ao atualizar status:", error);
@@ -249,7 +186,11 @@ async function handleMediaListClick(e) {
         // Se o usuário não cancelar e o título for diferente
         if (newTitle !== null && newTitle.trim() !== currentTitle) {
             try {
-                await updateDoc(docRef, { title: newTitle.trim() || "Sem título" });
+                await fetch(`${API_BASE_URL}/media/${mediaId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title: newTitle.trim() || "Sem título" })
+                });
                 showUserMessage("Título atualizado com sucesso.");
             } catch (error) {
                 console.error("Erro ao atualizar título:", error);
@@ -269,19 +210,18 @@ function initSortable() {
         handle: '.cursor-grab',
         onEnd: async (evt) => {
             const items = Array.from(mediaList.querySelectorAll('li'));
-            const batch = writeBatch(db);
-
-            items.forEach((item, index) => {
-                const docId = item.dataset.id;
-                if (docId) {
-                    const docRef = doc(db, MEDIA_COLLECTION, docId);
-                    // O novo 'order' é o timestamp atual + o índice para garantir unicidade e ordem
-                    batch.update(docRef, { order: Date.now() + index });
-                }
-            });
+            const orderedIds = items.map(item => item.dataset.id);
 
             try {
-                await batch.commit();
+                const response = await fetch(`${API_BASE_URL}/media/reorder`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ orderedIds: orderedIds })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Falha ao reordenar');
+                }
             } catch (error) {
                 console.error("Erro ao reordenar mídias:", error);
                 showUserMessage("Ocorreu um erro ao salvar a nova ordem.", true);
@@ -311,25 +251,70 @@ fileInput.addEventListener('change', () => {
 mediaList.addEventListener('click', handleMediaListClick);
 
 /**
- * NOVO: Configura o listener do Firestore após a autenticação.
+ * Busca as informações de armazenamento da API e atualiza a UI.
  */
-function setupFirestoreListener() {
-    const q = query(collection(db, MEDIA_COLLECTION), orderBy("order", "asc"));
-    onSnapshot(q, (querySnapshot) => {
-        const mediaItems = [];
-        querySnapshot.forEach((doc) => {
-            mediaItems.push({ id: doc.id, ...doc.data() });
-        });
+async function updateStorageInfo() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/storage-info`);
+        if (!response.ok) {
+            storageInfoDisplay.innerHTML = `<p class="text-sm text-red-500">Erro ao buscar dados de uso.</p>`;
+            return;
+        }
+        const data = await response.json();
+        const usedBytes = data.usedBytes;
+
+        // O plano gratuito do R2 oferece 10 GiB. 1 GiB = 1024*1024*1024 bytes.
+        const totalBytes = 10 * 1024 * 1024 * 1024; 
+
+        const usedGB = (usedBytes / (1024 * 1024 * 1024)).toFixed(2);
+        const totalGB = (totalBytes / (1024 * 1024 * 1024)).toFixed(0);
+        const percentage = Math.min((usedBytes / totalBytes) * 100, 100).toFixed(2);
+
+        // Define a cor da barra de progresso com base no uso
+        let progressBarColor = 'bg-blue-600'; // Normal
+        if (percentage > 90) {
+            progressBarColor = 'bg-red-600'; // Crítico
+        } else if (percentage > 75) {
+            progressBarColor = 'bg-yellow-500'; // Atenção
+        }
+
+        storageInfoDisplay.innerHTML = `
+            <div class="flex justify-between mb-1">
+                <span class="text-sm font-medium text-gray-700">${usedGB} GB de ${totalGB} GB utilizados</span>
+                <span class="text-sm font-medium text-gray-700">${percentage}%</span>
+            </div>
+            <div class="w-full bg-gray-200 rounded-full h-2.5">
+                <div class="${progressBarColor} h-2.5 rounded-full" style="width: ${percentage}%"></div>
+            </div>
+        `;
+
+    } catch (error) {
+        console.error("Erro ao buscar informações de armazenamento:", error);
+        storageInfoDisplay.innerHTML = `<p class="text-sm text-red-500">Não foi possível carregar os dados de uso.</p>`;
+    }
+}
+
+
+/**
+ * Carrega a lista de mídias da nossa API e renderiza na tela.
+ */
+async function loadInitialMedia() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/media`);
+        if (!response.ok) {
+            throw new Error('Não foi possível carregar a lista de mídias.');
+        }
+        const mediaItems = await response.json();
         renderMediaList(mediaItems);
-        // Inicializa ou reinicializa o sortable sempre que a lista é renderizada
         if (mediaItems.length > 0) {
             initSortable();
         }
-    }, (error) => {
+    } catch (error) {
         console.error("Erro ao buscar mídias:", error);
-        showUserMessage("Não foi possível carregar a lista de mídias. Verifique as permissões do Firestore.", true);
-    });
+        showUserMessage(error.message, true);
+    }
 }
 
-// Inicia o processo de autenticação, que por sua vez ativará os listeners.
-initializeAuthAndListeners();
+// Carrega os dados iniciais quando a página é carregada.
+loadInitialMedia();
+updateStorageInfo();

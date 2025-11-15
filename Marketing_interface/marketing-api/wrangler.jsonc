@@ -1,0 +1,29 @@
+/**
+ * For more details on how to configure Wrangler, refer to:
+ * https://developers.cloudflare.com/workers/wrangler/configuration/
+ */
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "marketing-api",
+	"main": "src/index.ts",
+	"compatibility_date": "2025-11-15",
+	"observability": {
+		"enabled": true
+	},
+	"vars": {
+		"R2_PUBLIC_URL": "https://pub-2919f0ce98e840cdb4e2c455cd5e251c.r2.dev"
+	},
+	"d1_databases": [
+		{
+			"binding": "D1_DATABASE",
+			"database_name": "marketing-meta",
+			"database_id": "964b5f2e-f91b-47a1-b398-0098360f52c5"
+		}
+	],
+	"r2_buckets": [
+		{
+			"binding": "R2_BUCKET",
+			"bucket_name": "marketing-media"
+		}
+	]
+}

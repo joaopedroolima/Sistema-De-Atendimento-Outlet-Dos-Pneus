@@ -8,22 +8,26 @@
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
 </head>
-<body class="bg-gray-900 text-white overflow-hidden">
+<body class="bg-gray-100 text-gray-800 overflow-hidden">
 
     <!-- Container Principal: Fila de Veículos -->
-    <main id="queue-container" class="p-8">
-        <header class="flex justify-between items-center mb-6">
-            <h1 class="text-4xl font-bold">Serviços em Andamento</h1>
-            <div id="clock" class="text-4xl font-semibold">14:30</div>
+    <main id="queue-container" class="flex flex-col h-screen">
+        <!-- Cabeçalho com as cores da loja -->
+        <header class="bg-blue-900 text-white p-4 shadow-lg flex justify-between items-center">
+            <div>
+                <h1 class="text-3xl font-bold">Outlet <span class="text-yellow-400">dos Pneus</span></h1>
+                <p class="text-base text-blue-200">Acompanhe seu veículo em tempo real</p>
+            </div>
+            <div id="clock" class="text-3xl font-semibold">14:30</div>
         </header>
 
-        <div id="service-list" class="grid grid-cols-2 gap-4">
+        <div id="service-list" class="flex-grow p-4 overflow-y-auto grid grid-cols-1 gap-2">
             <!-- Os carros em serviço serão inseridos aqui pelo script.js -->
         </div>
 
-        <footer class="fixed bottom-0 left-0 right-0 p-4 bg-black bg-opacity-30">
-            <h2 class="text-2xl font-semibold mb-2">Serviços Concluídos</h2>
-            <div id="ready-list" class="flex space-x-4">
+        <footer class="p-3 bg-white border-t border-gray-200">
+            <h2 class="text-lg font-semibold mb-2 text-gray-700">Prontos para Retirada</h2>
+            <div id="ready-list" class="flex flex-wrap gap-2">
                 <!-- Os carros prontos serão inseridos aqui -->
             </div>
         </footer>
@@ -34,9 +38,6 @@
 
     <!-- Tela Verde de Alerta (inicialmente oculta) -->
     <div id="ready-alert" class="hidden"></div>
-
-    <!-- Elemento de áudio para o alerta -->
-    <audio id="alert-sound" src="alert.mp3" preload="auto"></audio>
 
     <script src="script.js" type="module"></script>
 </body>

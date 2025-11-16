@@ -103,9 +103,12 @@ async function handleLogin(e) {
         } else if (ALLOWED_OPERATIONAL_PROFILES.includes(user.role)) {
             await logAccessAttempt(user.id, user.role, true, 'operacional_system');
             window.location.href = '../Operacional_system/index.html';
-        } else if (ALLOWED_CLIENT_PROFILES.includes(user.role)) { // NOVO: Redirecionamento para a fila (RF008)
-            await logAccessAttempt(user.id, user.role, true, 'customer_queue_display');
-            window.location.href = '../customer_queue_display/index.html';
+        } else if (ALLOWED_CLIENT_PROFILES.includes(user.role)) {
+            await logAccessAttempt(user.id, user.role, true, 'Cliente_queue');
+            // NOVO: Realiza login anônimo para dar permissão de leitura à tela do cliente.
+            // Isso é necessário para que os listeners do Firestore funcionem.
+            await signInAnonymously(auth);
+            window.location.href = '../Cliente_queue/index.html';
         } else {
             // RF002: Bloqueia perfis não autorizados
             await logAccessAttempt(user.id, user.role, false, 'any');

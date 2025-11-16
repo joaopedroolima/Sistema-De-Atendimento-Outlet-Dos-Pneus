@@ -4,7 +4,7 @@ body, html {
     margin: 0;
     padding: 0;
     overflow: hidden;
-    background-color: #111827; /* bg-gray-900 */
+    background-color: #f3f4f6; /* bg-gray-100 */
 }
 
 /* Estilo para a tela verde de alerta (RF003) */
@@ -12,13 +12,13 @@ body, html {
     position: fixed;
     inset: 0;
     background-color: #10B981; /* bg-emerald-500 */
-    color: white;
-    display: flex;
-    flex-direction: column;
+    color: white;    
+    /* display: flex; */ /* REMOVIDO: Esta linha causa a sobreposição da tela verde */
     justify-content: center;
     align-items: center;
     z-index: 100;
     text-align: center;
+    /* A propriedade 'display' foi removida daqui para respeitar a classe 'hidden' do HTML */
 }
 
 /* Estilo para o container de anúncios (RF005) */

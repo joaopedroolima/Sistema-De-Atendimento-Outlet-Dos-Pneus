@@ -21,12 +21,25 @@ body, html {
     /* A propriedade 'display' foi removida daqui para respeitar a classe 'hidden' do HTML */
 }
 
-/* Estilo para o container de anúncios (RF005) */
+/* Estilo para o container de anúncios (RF005) e fila */
+#queue-container,
 #ad-container img,
 #ad-container video {
     width: 100%;
     height: 100%;
     object-fit: contain; /* Garante que o anúncio caiba na tela */
+}
+
+/* NOVO: Adiciona transição suave de opacidade */
+#queue-container,
+#ad-container {
+    transition: opacity 0.4s ease-in-out;
+}
+
+/* NOVO: Classe para controlar o fade-out */
+.fade-hidden {
+    opacity: 0;
+    pointer-events: none; /* Impede interação durante a transição */
 }
 
 /* NOVO: Esconde a barra de rolagem da lista de serviços */

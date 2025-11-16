@@ -36,12 +36,23 @@ const STATUS_ATTENDING = 'Em Atendimento';
 // --- Estado Global ---
 let serviceJobs = [];
 let alignmentQueue = [];
+let ads = []; // NOVO: Armazena a lista de anúncios
 
 // --- Estado do Auto-Scroll ---
+let scrollTimeout = null;
 let scrollInterval = null;
-let scrollDirection = 'down';
-const SCROLL_SPEED = 25; // Intervalo de atualização (mais rápido para suavidade)
+const SCROLL_WAIT_AT_TOP = 30 * 1000; // 30 segundos
+const SCROLL_SPEED = 50; // Intervalo de atualização (mais rápido para suavidade)
 const SCROLL_STEP = 1; // Pixels por passo (menor para ser mais suave)
+
+// --- NOVO: Estado do Ciclo de Anúncios (RF005) ---
+const API_BASE_URL = 'https://marketing-api.lucasscosilva.workers.dev'; // URL da API de Marketing
+let adCycleTimeout = null; 
+let currentAdIndex = 0;
+const AD_CYCLE_INTERVAL = 60 * 1000; // 60 segundos
+const DEFAULT_IMAGE_AD_DURATION = 20 * 1000; // 20 segundos
+const readyAlert = document.getElementById('ready-alert');
+
 
 // --- Gerenciamento de Exibição (Fila vs Anúncios) ---
 const queueContainer = document.getElementById('queue-container');
@@ -81,7 +92,8 @@ function waitForFirebaseAuth() {
 function initializeSystem() {
     setupClock();
     setupRealtimeListeners();
-    // Futuramente, aqui chamaremos a função que gerencia anúncios.
+    fetchAds(); // Busca os anúncios da API
+    startAdCycle(); // Inicia o ciclo de exibição de anúncios
 }
 
 /**
@@ -225,39 +237,134 @@ function renderReadyList(items) {
  */
 function handleAutoScroll() {
     const container = document.getElementById('service-list');
-    const isOverflowing = container.scrollHeight > container.clientHeight;
-
+    
+    // Limpa timers e intervalos anteriores para evitar loops duplicados
+    if (scrollTimeout) clearTimeout(scrollTimeout);
     if (scrollInterval) {
         clearInterval(scrollInterval);
         scrollInterval = null;
     }
 
+    // Volta ao topo sempre que a função é chamada (após um anúncio ou ao chegar no fim)
+    container.scrollTop = 0;
+
+    const isOverflowing = container.scrollHeight > container.clientHeight;
     if (isOverflowing) {
-        scrollInterval = setInterval(() => {
-            // Adiciona uma pequena margem para garantir que chegue ao fim
-            const atBottom = container.scrollTop + container.clientHeight >= container.scrollHeight;
-            const atTop = container.scrollTop === 0;
+        // Função que inicia a rolagem para baixo
+        const startScrollingDown = () => {
+            scrollInterval = setInterval(() => {
+                const atBottom = container.scrollTop + container.clientHeight >= container.scrollHeight;
 
-            if (scrollDirection === 'down' && atBottom) {
-                scrollDirection = 'up'; // Prepara para subir
-                clearInterval(scrollInterval); // Pausa no final
-                setTimeout(handleAutoScroll, 2500); // Espera 2.5s e recomeça
-                return;
-            }
-            
-            if (scrollDirection === 'up' && atTop) {
-                scrollDirection = 'down'; // Prepara para descer
-                clearInterval(scrollInterval); // Pausa no topo
-                setTimeout(handleAutoScroll, 2500); // Espera 2.5s e recomeça
-                return;
-            }
+                if (atBottom) {
+                    // Chegou ao fim, limpa o intervalo e reinicia o ciclo
+                    clearInterval(scrollInterval);
+                    handleAutoScroll(); 
+                } else {
+                    // Continua rolando para baixo
+                    container.scrollBy({ top: SCROLL_STEP, behavior: 'smooth' });
+                }
+            }, SCROLL_SPEED);
+        };
 
-            container.scrollBy({
-                top: scrollDirection === 'down' ? SCROLL_STEP : -SCROLL_STEP,
-                behavior: 'auto' // 'auto' é melhor para rolagem contínua com setInterval
-            });
-        }, SCROLL_SPEED);
+        // Fica no topo por 30 segundos e então começa a descer
+        scrollTimeout = setTimeout(startScrollingDown, SCROLL_WAIT_AT_TOP);
     }
+}
+
+// =========================================================================
+// NOVO: LÓGICA DE EXIBIÇÃO DE ANÚNCIOS (RF005, RF006, RF010)
+// =========================================================================
+
+/**
+ * Busca a lista de anúncios ativos da API de marketing.
+ */
+async function fetchAds() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/media`);
+        if (!response.ok) {
+            throw new Error('Falha ao buscar mídias da API.');
+        }
+        const mediaItems = await response.json();
+        // Filtra apenas os ativos e mapeia para o formato esperado
+        ads = mediaItems
+            .filter(item => item.status === 'ativo')
+            .map(item => ({ ...item, type: item.type === 'Imagem' ? 'image' : 'video' }))
+            .sort((a, b) => (a.order || 99) - (b.order || 99)); // Ordena pela ordem definida
+
+        console.log(`Anúncios ativos carregados via API: ${ads.length}`);
+    } catch (error) {
+        console.error("Erro ao buscar anúncios da API:", error);
+        ads = []; // Garante que a lista de anúncios fique vazia em caso de erro (RF010)
+    }
+}
+
+/**
+ * Inicia o ciclo que agenda a exibição de anúncios.
+ */
+function startAdCycle() {
+    // Limpa qualquer agendamento anterior para evitar duplicatas
+    if (adCycleTimeout) {
+        clearTimeout(adCycleTimeout);
+    }
+    // Agenda a próxima exibição de anúncio
+    adCycleTimeout = setTimeout(showNextAd, AD_CYCLE_INTERVAL);
+    console.log(`Ciclo de anúncios iniciado. Próximo anúncio em ${AD_CYCLE_INTERVAL / 60000} minutos.`);
+}
+
+/**
+ * Exibe o próximo anúncio da lista.
+ */
+function showNextAd() {
+    // RF010: Se não houver anúncios, simplesmente reagenda e continua exibindo a fila.
+    if (ads.length === 0) {
+        console.warn("Nenhum anúncio para exibir. Reagendando ciclo.");
+        startAdCycle();
+        return;
+    }
+
+    // Seleciona o próximo anúncio em formato de rodízio
+    const ad = ads[currentAdIndex];
+    currentAdIndex = (currentAdIndex + 1) % ads.length;
+
+    // Para a rolagem da fila e esconde o container
+    if (scrollInterval) clearInterval(scrollInterval);
+    queueContainer.classList.add('fade-hidden'); // Inicia o fade-out da fila
+
+    setTimeout(() => { // Aguarda a transição para trocar os conteúdos
+        queueContainer.classList.add('hidden');
+        adContainer.innerHTML = ''; // Limpa anúncios anteriores
+        adContainer.classList.remove('hidden', 'fade-hidden');
+
+        if (ad.type === 'video') {
+            const video = document.createElement('video'); // RF005
+            video.src = ad.url;
+            video.autoplay = true;
+            video.muted = true; // Autoplay com som geralmente é bloqueado
+            video.playsInline = true;
+            video.onended = hideAdAndResume; // Volta para a fila quando o vídeo termina
+            adContainer.appendChild(video);
+        } else { // 'image'
+            const img = document.createElement('img'); // RF005
+            img.src = ad.url;
+            adContainer.appendChild(img);
+            // Volta para a fila após o tempo configurado (ou padrão de 20s)
+            const duration = (ad.duration || DEFAULT_IMAGE_AD_DURATION);
+            setTimeout(hideAdAndResume, duration);
+        }
+    }, 400); // Tempo da transição em ms
+}
+
+/**
+ * Esconde o anúncio, volta a exibir a fila e reinicia o ciclo.
+ */
+function hideAdAndResume() {
+    adContainer.classList.add('fade-hidden'); // Inicia o fade-out do anúncio
+    setTimeout(() => {
+        adContainer.classList.add('hidden'); // Esconde o container do anúncio
+        queueContainer.classList.remove('hidden', 'fade-hidden');
+        handleAutoScroll(); // Retoma a rolagem automática da fila
+        startAdCycle(); // Reagenda o próximo anúncio
+    }, 400); // Tempo da transição em ms
 }
 
 // --- Inicialização ---

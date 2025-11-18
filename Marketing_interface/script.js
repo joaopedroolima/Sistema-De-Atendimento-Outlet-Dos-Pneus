@@ -105,11 +105,11 @@ function renderMediaList(mediaItems) {
 
         return `
             <li class="p-4 flex justify-between items-center hover:bg-gray-50 cursor-grab" data-id="${id}">
-                <div class="flex items-center">
+                <div class="flex items-center flex-grow">
                     <div class="w-24 h-16 bg-gray-200 rounded-md flex items-center justify-center mr-4">${thumbnailHTML}</div>
                     <div>
                         <p class="text-sm font-medium text-gray-900 media-title-text">${title}</p>
-                        <p class="text-sm text-gray-500">${type}</p>
+                        <p class="text-sm text-gray-500">${type} - ${status}</p>
                     </div>
                 </div>
                 <div class="flex items-center space-x-3">
@@ -160,9 +160,10 @@ async function handleMediaListClick(e) {
     }
 
     // --- Lógica para o switch de status ---
-    const toggleSwitch = target.closest('.toggle-switch-container');
-    if (toggleSwitch) {
-        const checkbox = toggleSwitch.querySelector('.toggle-checkbox');
+    const isToggleClick = target.classList.contains('toggle-checkbox') || target.classList.contains('toggle-label');
+    if (isToggleClick) {
+        const checkbox = listItem.querySelector('.toggle-checkbox');
+        // O evento de clique no label já altera o 'checked' do input, então o estado já está "novo"
         const newStatus = checkbox.checked ? 'ativo' : 'inativo';
         try {
             await fetch(`${API_BASE_URL}/media/${mediaId}`, {
@@ -170,6 +171,7 @@ async function handleMediaListClick(e) {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ status: newStatus })
             });
+            loadInitialMedia(); // Recarrega a lista para refletir a mudança
             showUserMessage(`Status atualizado para '${newStatus}'.`);
         } catch (error) {
             console.error("Erro ao atualizar status:", error);
@@ -194,6 +196,7 @@ async function handleMediaListClick(e) {
                     body: JSON.stringify({ title: newTitle.trim() || "Sem título" })
                 });
                 showUserMessage("Título atualizado com sucesso.");
+                titleElement.textContent = newTitle.trim() || "Sem título"; // Atualiza o título na UI sem recarregar tudo
             } catch (error) {
                 console.error("Erro ao atualizar título:", error);
                 showUserMessage("Erro ao atualizar o título.", true);
@@ -209,7 +212,7 @@ function initSortable() {
     new Sortable(mediaList, {
         animation: 150,
         ghostClass: 'bg-blue-100',
-        handle: '.cursor-grab',
+        filter: 'button, .toggle-checkbox, .toggle-label', // Ignora cliques em botões e no switch
         onEnd: async (evt) => {
             const items = Array.from(mediaList.querySelectorAll('li'));
             const orderedIds = items.map(item => item.dataset.id);
@@ -224,6 +227,7 @@ function initSortable() {
                 if (!response.ok) {
                     throw new Error('Falha ao reordenar');
                 }
+                loadInitialMedia(); // Recarrega para atualizar os números de posição
             } catch (error) {
                 console.error("Erro ao reordenar mídias:", error);
                 showUserMessage("Ocorreu um erro ao salvar a nova ordem.", true);

@@ -44,7 +44,7 @@ const API_BASE_URL = 'https://marketing-api.lucasscosilva.workers.dev'; // URL d
 let adCycleTimeout = null; 
 let adDisplayTimeout = null; // NOVO: Timer para a duração da exibição do anúncio
 let currentAdIndex = 0;
-const CYCLE_INTERVAL = 45 * 1000; // 30 segundos para cada etapa (fila ou anúncio)
+const CYCLE_INTERVAL = 5 * 1000; // 30 segundos para cada etapa (anúncio)
 const readyAlert = document.getElementById('ready-alert');
 
 

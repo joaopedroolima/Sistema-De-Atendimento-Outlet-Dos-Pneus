@@ -95,6 +95,14 @@ let historyYear = new Date().getFullYear(); // NOVO: Para os filtros mensal e an
 // NOVO: Variável global para a lista de histórico detalhado, para ser usada pelo exportador de PDF.
 let detailedHistoryList = [];
 
+// NOVO: Armazena os objetos de dados para os destaques do dashboard, para que possam ser clicados.
+let dashboardHighlightData = {
+    bestPerformer: null,
+    worstPerformer: null,
+    slowestCar: null,
+    fastestCar: null,
+};
+
 let MECHANICS = ['José', 'Wendell']; // MANTIDO: Como fallback inicial, será substituído pelo Firestore
 const TIRE_SHOP_MECHANIC = 'Borracheiro';
 const ALIGNMENT_MECHANIC = 'Alinhador'; // NOVO: Constante para o Alinhador
@@ -2731,23 +2739,37 @@ function renderReadyJobs(serviceJobs, alignmentQueue) {
             // --- Destaques (Req 5.5) ---
             let bestPerformer = { name: '--', avgStr: '--' };
             let worstPerformer = { name: '--', avgStr: '--' };
+            let bestPerformerJob = null; // NOVO: Para armazenar o job específico
+            let worstPerformerJob = null; // NOVO: Para armazenar o job específico
+
             if (eligibleForRanking.length > 0) {
                 // Lógica de Score: 60% peso para tempo baixo, 40% para quantidade alta.
                 const maxCount = Math.max(...eligibleForRanking.map(m => m.count), 0);
                 const maxAvgMs = Math.max(...eligibleForRanking.map(m => m.avgMs), 0);
-
+    
                 eligibleForRanking.forEach(m => {
                     const normalizedCount = maxCount > 0 ? (m.count / maxCount) : 0;
                     const normalizedTime = maxAvgMs > 0 ? (m.avgMs / maxAvgMs) : 0;
                     // Score: 40% para contagem, 60% para tempo (invertido, pois tempo menor é melhor)
                     m.score = (0.4 * normalizedCount) + (0.6 * (1 - normalizedTime));
                 });
-
+    
                 const sortedByScore = [...eligibleForRanking].sort((a, b) => b.score - a.score);
-                bestPerformer = { name: sortedByScore[0].name, avgStr: formatDuration(sortedByScore[0].avgMs) };
-
+                const best = sortedByScore[0];
                 const worst = sortedByScore[sortedByScore.length - 1];
+    
+                bestPerformer = { name: best.name, avgStr: formatDuration(best.avgMs) };
                 worstPerformer = { name: worst.name, avgStr: formatDuration(worst.avgMs) };
+    
+                // NOVO: Encontra o melhor serviço do melhor mecânico e o pior do pior.
+                const bestPerformerServices = detailedHistoryList.filter(item => item.mechanics && item.mechanics.includes(best.name));
+                if (bestPerformerServices.length > 0) {
+                    bestPerformerJob = bestPerformerServices.sort((a, b) => a.durationMs - b.durationMs)[0];
+                }
+                const worstPerformerServices = detailedHistoryList.filter(item => item.mechanics && item.mechanics.includes(worst.name));
+                if (worstPerformerServices.length > 0) {
+                    worstPerformerJob = worstPerformerServices.sort((a, b) => b.durationMs - a.durationMs)[0];
+                }
             }
 
             let slowestCar = { car: '--', avgStr: '--' };
@@ -2755,14 +2777,14 @@ function renderReadyJobs(serviceJobs, alignmentQueue) {
             if (detailedHistoryList.length > 0) {
                 const sortedByDuration = [...detailedHistoryList].sort((a, b) => a.durationMs - b.durationMs);
 
-                const slowest = sortedByDuration[sortedByDuration.length - 1];
-                const bottleneckInfo = slowest.bottleneck ? `Gargalo: ${slowest.bottleneck}` : '';
-                slowestCar = { car: slowest.car, avgStr: `${slowest.durationStr}` };
+                slowestCar = sortedByDuration[sortedByDuration.length - 1];
+                const bottleneckInfo = slowestCar.bottleneck ? `Gargalo: ${slowestCar.bottleneck}` : '';
+                slowestCar.avgStr = `${slowestCar.durationStr}`;
                 if (bottleneckInfo) slowestCar.avgStr += ` (${bottleneckInfo})`;
 
-                const fastest = sortedByDuration[0];
-                const etapasInfo = fastest.etapas ? `Etapas: ${fastest.etapas}` : '';
-                fastestCar = { car: fastest.car, avgStr: `${fastest.durationStr}` };
+                fastestCar = sortedByDuration[0];
+                const etapasInfo = fastestCar.etapas ? `Etapas: ${fastestCar.etapas}` : '';
+                fastestCar.avgStr = `${fastestCar.durationStr}`;
                 if (etapasInfo) fastestCar.avgStr += ` (${etapasInfo})`;
             }
 
@@ -2786,6 +2808,11 @@ function renderReadyJobs(serviceJobs, alignmentQueue) {
             // Renderiza Destaques (Req 5.5)
             document.getElementById('dash-best-performer').textContent = bestPerformer.name;
             document.getElementById('dash-best-performer-avg').textContent = bestPerformer.avgStr;
+            // ATUALIZADO: Armazena o job específico para o clique, em vez do nome do mecânico.
+            dashboardHighlightData.bestPerformer = bestPerformerJob ? { id: bestPerformerJob.id, type: bestPerformerJob.type } : null;
+            dashboardHighlightData.worstPerformer = worstPerformerJob ? { id: worstPerformerJob.id, type: worstPerformerJob.type } : null;
+            dashboardHighlightData.slowestCar = slowestCar.id ? { id: slowestCar.id, type: slowestCar.type } : null; // Mantido
+            dashboardHighlightData.fastestCar = fastestCar.id ? { id: fastestCar.id, type: fastestCar.type } : null; // Mantido
             document.getElementById('dash-worst-performer').textContent = worstPerformer.name;
             document.getElementById('dash-worst-performer-avg').textContent = worstPerformer.avgStr;
             document.getElementById('dash-slowest-car').textContent = slowestCar.car;
@@ -3199,6 +3226,25 @@ function renderReadyJobs(serviceJobs, alignmentQueue) {
             });
         });
 
+        // NOVO: Listeners para os destaques do dashboard
+        document.getElementById('highlight-best-performer').addEventListener('click', () => {
+            // ATUALIZADO: Agora abre o modal de detalhes do histórico.
+            const data = dashboardHighlightData.bestPerformer;
+            if (data && data.id) showHistoryDetailModal(data.id, data.type);
+        });
+        document.getElementById('highlight-worst-performer').addEventListener('click', () => {
+            // ATUALIZADO: Agora abre o modal de detalhes do histórico.
+            const data = dashboardHighlightData.worstPerformer;
+            if (data && data.id) showHistoryDetailModal(data.id, data.type);
+        });
+        document.getElementById('highlight-slowest-car').addEventListener('click', () => {
+            const data = dashboardHighlightData.slowestCar;
+            if (data && data.id) showHistoryDetailModal(data.id, data.type);
+        });
+        document.getElementById('highlight-fastest-car').addEventListener('click', () => {
+            const data = dashboardHighlightData.fastestCar;
+            if (data && data.id) showHistoryDetailModal(data.id, data.type);
+        });
         // =========================================================================
         // NOVO: Funções de Modais Adicionais
         // =========================================================================
@@ -3222,9 +3268,13 @@ function renderReadyJobs(serviceJobs, alignmentQueue) {
          * @param {string} jobId - O ID do serviço a ser detalhado.
          */
         function showHistoryDetailModal(jobId, type) {
-            // CORREÇÃO: Procura o job na lista correta (serviços ou alinhamento)
+            // ATUALIZADO: Determina a coleção correta para buscar o job.
+            // O 'type' que vem dos destaques pode ser 'Serviço Geral', 'Alinhamento', etc.
+            // Precisamos mapeá-lo para 'service' ou 'alignment'.
+            const collectionType = (type === 'Alinhamento' && !detailedHistoryList.find(item => item.id === jobId)?.etapas.includes('Serviço Geral')) ? 'alignment' : 'service';
+
             let job;
-            if (type === 'service') {
+            if (collectionType === 'service') {
                 job = serviceJobs.find(j => j.id === jobId);
             } else {
                 job = alignmentQueue.find(j => j.id === jobId);
@@ -3236,7 +3286,7 @@ function renderReadyJobs(serviceJobs, alignmentQueue) {
             }
 
             const contentEl = document.getElementById('history-detail-content');
-            const isService = type === 'service';
+            const isService = collectionType === 'service';
 
             // CORREÇÃO: Melhora a exibição dos detalhes, mostrando mais informações de tempo.
             contentEl.innerHTML = `

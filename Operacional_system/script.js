@@ -94,6 +94,15 @@ let historyYear = new Date().getFullYear(); // NOVO: Para os filtros mensal e an
 
 // NOVO: Variável global para a lista de histórico detalhado, para ser usada pelo exportador de PDF.
 let detailedHistoryList = [];
+let performanceList = []; // NOVO: Movido para o escopo global para ser acessível pelo exportador de PDF.
+let lostHistoryList = []; // NOVO: Movido para o escopo global para ser acessível pelo exportador de PDF.
+
+// NOVO: Variáveis de métricas movidas para o escopo global para serem acessíveis pelo exportador de PDF.
+let allWaitTimes = [];
+let allGsDurations = [];
+let allTsDurations = [];
+let allAliDurations = [];
+let mechanicStats = {}; // NOVO: Movido para o escopo global para ser acessível pelo exportador de PDF.
 
 // NOVO: Armazena os objetos de dados para os destaques do dashboard, para que possam ser clicados.
 let dashboardHighlightData = {
@@ -2425,7 +2434,7 @@ function renderReadyJobs(serviceJobs, alignmentQueue) {
 
         // NOVO: Helper para verificar se o timestamp é de um mês/ano específico
         function isTimestampFromMonthAndYear(timestamp, month, year) {
-            if (!timestamp) return false;
+            if (!timestamp) return false;ntendeu
             const date = new Date(getTimestampSeconds(timestamp) * 1000);
             return date.getFullYear() === year && date.getMonth() === month;
         }
@@ -2571,17 +2580,20 @@ function renderReadyJobs(serviceJobs, alignmentQueue) {
             const finalizedServicesToday = serviceJobs.filter(j => j.status === STATUS_FINALIZED && periodFilterFn(j.finalizedAt));
             const finalizedAlignmentsToday = alignmentQueue.filter(a => a.status === STATUS_FINALIZED && periodFilterFn(a.finalizedAt));
 
-            // Arrays para armazenar durações de cada etapa para cálculo da média geral
-            const allWaitTimes = [];
-            const allGsDurations = [];
-            const allTsDurations = []; // NOVO: Para métricas de borracharia
-            const allAliDurations = [];
+            // Limpa os arrays de métricas globais antes de recalcular
+            allWaitTimes = [];
+            allGsDurations = [];
+            allTsDurations = [];
+            allAliDurations = [];
  
-            detailedHistoryList = []; // ATUALIZADO: Limpa a variável global
-            const lostHistoryList = []; // NOVO: Para histórico de perdas
+            // Limpa as listas de histórico antes de recalcular.
+            detailedHistoryList = []; // Limpa a lista de histórico detalhado
+            performanceList = []; // Limpa a lista de desempenho
 
+            lostHistoryList = []; // Limpa a lista de histórico de perdas
+            
             // Inicializa stats para todos os mecânicos, incluindo os fixos e os do DB
-            let mechanicStats = {};
+            mechanicStats = {}; // Limpa o objeto global antes de recalcular
             [...MECHANICS, TIRE_SHOP_MECHANIC, ALIGNMENT_MECHANIC].forEach(m => {
                 mechanicStats[m] = {
                     count: 0,
@@ -2720,7 +2732,7 @@ function renderReadyJobs(serviceJobs, alignmentQueue) {
             // =================================================================
 
             // --- Desempenho por Mecânico (Req 5.4) ---
-            const performanceList = [];
+            performanceList = []; // ATUALIZADO: Limpa a lista global em vez de criar uma nova local.
             Object.keys(mechanicStats).forEach(name => {
                 const stats = mechanicStats[name];
                 if (stats.count > 0) { // Só mostra quem trabalhou
@@ -2921,7 +2933,8 @@ function renderReadyJobs(serviceJobs, alignmentQueue) {
                 // 1. Carrega dinamicamente as bibliotecas para garantir que estejam prontas.
                 // Isso resolve problemas de escopo e tempo de carregamento com módulos.
                 await import('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
-                await import('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf-autotable.umd.js'); // CORREÇÃO: URL ajustado para o correto no CDN.
+                
+                await import('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js');
 
                 // 2. Acessa a classe jsPDF do módulo carregado.
                 const { jsPDF } = window.jspdf;
@@ -2969,8 +2982,159 @@ function renderReadyJobs(serviceJobs, alignmentQueue) {
             }
         }
 
-        // NOVO: Listener para o botão de exportar PDF
-        document.getElementById('export-history-pdf').addEventListener('click', exportHistoryToPDF);
+        // NOVO: Função para exportar o Dashboard de Métricas para PDF
+        async function exportDashboardToPDF() {
+            try {
+                // 1. Garante que as bibliotecas jsPDF estão carregadas.
+                await import('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+                await import('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js');
+
+                if (typeof window.jspdf === 'undefined' || typeof window.jspdf.jsPDF === 'undefined') {
+                    throw new Error("A biblioteca jsPDF não foi carregada corretamente.");
+                }
+
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF();
+                let lastY = 0; // Controla a posição vertical no documento
+                const pageHeight = doc.internal.pageSize.height;
+
+                // --- Cabeçalho ---
+                const periodLabel = { daily: 'Diário', weekly: 'Semanal', monthly: 'Mensal', yearly: 'Anual' }[historyPeriod] || 'Período';
+                const title = `Relatório de Desempenho - ${periodLabel}`;
+                const date = new Date().toLocaleDateString('pt-BR');
+
+                doc.setFontSize(18);
+                doc.text(title, 14, 22);
+                doc.setFontSize(11);
+                doc.setTextColor(100);
+                doc.text(`Período de Análise: ${date}`, 14, 30);
+                lastY = 32;
+
+                // --- Seção 1: Destaques do Período ---
+                doc.autoTable({
+                    startY: lastY + 5,
+                    head: [['Destaques do Período']],
+                    body: [
+                        [`Melhor Desempenho: ${document.getElementById('dash-best-performer').textContent} (${document.getElementById('dash-best-performer-avg').textContent})`],
+                        [`Pior Desempenho: ${document.getElementById('dash-worst-performer').textContent} (${document.getElementById('dash-worst-performer-avg').textContent})`],
+                        [`Atendimento Mais Lento: ${document.getElementById('dash-slowest-car').textContent} (${document.getElementById('dash-slowest-car-avg').textContent})`],
+                        [`Atendimento Mais Rápido: ${document.getElementById('dash-fastest-car').textContent} (${document.getElementById('dash-fastest-car-avg').textContent})`]
+                    ],
+                    theme: 'grid',
+                    headStyles: { fillColor: [70, 70, 70], halign: 'center' }, // Cinza escuro para o cabeçalho
+                    bodyStyles: { halign: 'center' },
+                    didDrawPage: (data) => { lastY = data.cursor.y; }
+                });
+
+                // --- Seção 2: Desempenho por Profissional ---
+                const teamPerformanceData = performanceList.map(mec => [
+                    mec.name,
+                    mec.count.toString(),
+                    mec.avgMs > 0 ? formatDuration(mec.avgMs) : 'N/A'
+                ]);
+
+                if (teamPerformanceData.length > 0) {
+                    doc.autoTable({
+                        startY: lastY + 5,
+                        head: [['Profissional', 'Nº de Atendimentos', 'Tempo Médio']],
+                        body: teamPerformanceData,
+                        theme: 'striped',
+                        headStyles: { fillColor: [41, 128, 185] }, // Cor azul
+                        didDrawPage: (data) => { lastY = data.cursor.y; }
+                    });
+                } else {
+                    doc.text("Nenhum dado de desempenho por profissional para exibir.", 14, lastY + 5);
+                    lastY += 15;
+                }
+
+                // --- Seção 3: Desempenho por Etapa do Processo ---
+                const avgWaitTimeMs = calculateAvg(allWaitTimes);
+                const avgGsTimeMs = calculateAvg(allGsDurations);
+                const avgTsTimeMs = calculateAvg(allTsDurations);
+                const avgAliTimeMs = calculateAvg(allAliDurations);
+
+                const stagePerformanceData = [
+                    [
+                        'Espera na Fila',
+                        allWaitTimes.length.toString(),
+                        formatDuration(avgWaitTimeMs),
+                        formatDuration(allWaitTimes.length > 0 ? Math.min(...allWaitTimes) : 0),
+                        formatDuration(allWaitTimes.length > 0 ? Math.max(...allWaitTimes) : 0)
+                    ],
+                    [
+                        'Serviço Geral',
+                        allGsDurations.length.toString(),
+                        formatDuration(avgGsTimeMs),
+                        formatDuration(allGsDurations.length > 0 ? Math.min(...allGsDurations) : 0),
+                        formatDuration(allGsDurations.length > 0 ? Math.max(...allGsDurations) : 0)
+                    ],
+                    [
+                        'Borracharia',
+                        (mechanicStats[TIRE_SHOP_MECHANIC]?.count || 0).toString(),
+                        'N/A', // Duração não medida
+                        'N/A',
+                        'N/A'
+                    ],
+                    [
+                        'Alinhamento',
+                        allAliDurations.length.toString(),
+                        formatDuration(avgAliTimeMs),
+                        formatDuration(allAliDurations.length > 0 ? Math.min(...allAliDurations) : 0),
+                        formatDuration(allAliDurations.length > 0 ? Math.max(...allAliDurations) : 0)
+                    ]
+                ];
+
+                doc.autoTable({
+                    startY: lastY + 5,
+                    head: [['Etapa', 'Nº de Ocorrências', 'Tempo Médio', 'Tempo Mínimo', 'Tempo Máximo']],
+                    body: stagePerformanceData,
+                    theme: 'striped',
+                    headStyles: { fillColor: [39, 174, 96] }, // Cor verde
+                    didDrawPage: (data) => { lastY = data.cursor.y; }
+                });
+
+                // --- Seção 4: Tabela de Serviços Perdidos ---
+                const lostServicesData = lostHistoryList.map(item => [
+                    item.car,
+                    item.vendedor,
+                    item.etapa
+                ]);
+                if (lostServicesData.length > 0) {
+                    doc.autoTable({
+                        startY: lastY + 5, // Adiciona um espaço
+                        head: [['Carro Perdido', 'Vendedor', 'Etapa da Perda']],
+                        body: lostServicesData,
+                        theme: 'striped',
+                        headStyles: { fillColor: [231, 76, 60] }, // Cor vermelha
+                        didDrawPage: (data) => { lastY = data.cursor.y; }
+                    });
+                }
+
+                // --- Rodapé ---
+                const pageCount = doc.internal.getNumberOfPages();
+                for (let i = 1; i <= pageCount; i++) {
+                    doc.setPage(i);
+                    doc.setFontSize(8);
+                    doc.setTextColor(150);
+                    doc.text('N/A: Não se Aplica (a métrica não é relevante para o item).', 14, pageHeight - 15);
+                    doc.text(`Página ${i} de ${pageCount}`, doc.internal.pageSize.width - 35, pageHeight - 15);
+                }
+
+                // --- Salva o arquivo ---
+                const fileName = `metricas_desempenho_${historyPeriod}_${new Date().toISOString().split('T')[0]}.pdf`;
+                doc.save(fileName);
+
+            } catch (error) {
+                console.error("Falha ao gerar PDF de Métricas:", error);
+                alert("Ocorreu um erro ao tentar exportar o PDF de Métricas. Verifique o console para mais detalhes.");
+            }
+        }
+
+        // NOVO: Listener para o botão de exportar Métricas
+        document.getElementById('export-dashboard-btn').addEventListener('click', exportDashboardToPDF);
+
+        // CORREÇÃO: Adiciona o listener para o botão de exportar o histórico, que estava faltando.
+        document.getElementById('export-history-btn').addEventListener('click', exportHistoryToPDF);
 
         /**
          * NOVO: Controla a visibilidade dos filtros de data, mês e ano com base no período selecionado.

@@ -446,6 +446,11 @@ function resetPromotionForm() {
     const firstIconClass = Object.keys(PROMO_ICONS)[0];
     promoIconValueInput.value = firstIconClass;
     promoIconSelectedDisplay.innerHTML = `<i class="${firstIconClass} w-5 h-5 text-center mr-3 text-blue-600"></i> ${Object.values(PROMO_ICONS)[0]}`;
+
+    // ATUALIZADO: Força a atualização dos contadores para zerá-los na UI.
+    document.getElementById('promo-title-counter').textContent = `0/${promoTitleInput.maxLength}`;
+    document.getElementById('promo-description-counter').textContent = `0/${promoDescInput.maxLength}`;
+    document.getElementById('promo-offer-counter').textContent = `0/${promoOfferInput.maxLength}`;
 }
 
 async function handlePromotionsListClick(e) {
@@ -887,6 +892,25 @@ function setupTabs() {
 }
 
 /**
+ * NOVO: Configura um contador de caracteres para um campo de input.
+ * @param {HTMLInputElement} inputElement - O elemento do input.
+ * @param {HTMLElement} counterElement - O elemento para exibir o contador.
+ */
+function setupCharacterCounter(inputElement, counterElement) {
+    if (!inputElement || !counterElement) return;
+
+    const maxLength = inputElement.maxLength;
+
+    const updateCounter = () => {
+        const currentLength = inputElement.value.length;
+        counterElement.textContent = `${currentLength}/${maxLength}`;
+    };
+
+    inputElement.addEventListener('input', updateCounter);
+    updateCounter(); // Chama uma vez para definir o estado inicial
+}
+
+/**
  * NOVO: Inicialização do sistema
  */
 function initializeSystem() {
@@ -902,6 +926,16 @@ function initializeSystem() {
     promotionForm.addEventListener('submit', handlePromotionSubmit);
     promotionsList.addEventListener('click', handlePromotionsListClick);
     promoCancelBtn.addEventListener('click', resetPromotionForm);
+
+    // NOVO: Configura os contadores de caracteres para os formulários de promoção
+    setupCharacterCounter(promoTitleInput, document.getElementById('promo-title-counter'));
+    setupCharacterCounter(promoDescInput, document.getElementById('promo-description-counter'));
+    setupCharacterCounter(promoOfferInput, document.getElementById('promo-offer-counter'));
+
+    // Contadores para o modal de edição
+    setupCharacterCounter(promoEditTitleInput, document.getElementById('promo-edit-title-counter'));
+    setupCharacterCounter(promoEditDescInput, document.getElementById('promo-edit-description-counter'));
+    setupCharacterCounter(promoEditOfferInput, document.getElementById('promo-edit-offer-counter'));
 
     // NOVO: Listeners para o modal de edição de promoção
     promoEditForm.addEventListener('submit', async (e) => {

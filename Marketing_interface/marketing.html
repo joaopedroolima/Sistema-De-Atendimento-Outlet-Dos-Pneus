@@ -102,15 +102,18 @@
                             <div class="space-y-4">
                                 <div>
                                     <label for="promo-title" class="block text-sm font-medium text-gray-700">Título</label>
-                                    <input type="text" id="promo-title" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-3 border" required placeholder="Ex: Troca de Óleo Completa">
+                                    <input type="text" id="promo-title" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-3 border" required placeholder="Ex: Troca de Óleo Completa" maxlength="24">
+                                    <div id="promo-title-counter" class="text-xs text-right text-gray-500 mt-1"></div>
                                 </div>
                                 <div>
                                     <label for="promo-description" class="block text-sm font-medium text-gray-700">Descrição</label>
-                                    <input type="text" id="promo-description" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-3 border" placeholder="Ex: Óleo sintético + filtro">
+                                    <input type="text" id="promo-description" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-3 border" placeholder="Ex: Óleo sintético + filtro" maxlength="28">
+                                    <div id="promo-description-counter" class="text-xs text-right text-gray-500 mt-1"></div>
                                 </div>
                                 <div>
                                     <label for="promo-offer" class="block text-sm font-medium text-gray-700">Oferta</label>
-                                    <input type="text" id="promo-offer" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-3 border" required placeholder="Ex: 30% OFF ou R$ 150,00">
+                                    <input type="text" id="promo-offer" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-3 border" required placeholder="Ex: 30% OFF ou R$ 150,00" maxlength="20">
+                                    <div id="promo-offer-counter" class="text-xs text-right text-gray-500 mt-1"></div>
                                 </div>
                                 <div>
                                     <label for="promo-validity" class="block text-sm font-medium text-gray-700">Data de Validade</label>
@@ -205,15 +208,18 @@
             <form id="promo-edit-form" class="mt-4 space-y-4">
                 <div>
                     <label for="promo-edit-title" class="block text-sm font-medium text-gray-700">Título</label>
-                    <input type="text" id="promo-edit-title" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-3 border" required>
+                    <input type="text" id="promo-edit-title" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-3 border" required maxlength="24">
+                    <div id="promo-edit-title-counter" class="text-xs text-right text-gray-500 mt-1"></div>
                 </div>
                 <div>
                     <label for="promo-edit-description" class="block text-sm font-medium text-gray-700">Descrição</label>
-                    <input type="text" id="promo-edit-description" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-3 border">
+                    <input type="text" id="promo-edit-description" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-3 border" maxlength="28">
+                    <div id="promo-edit-description-counter" class="text-xs text-right text-gray-500 mt-1"></div>
                 </div>
                 <div>
                     <label for="promo-edit-offer" class="block text-sm font-medium text-gray-700">Oferta</label>
-                    <input type="text" id="promo-edit-offer" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-3 border" required>
+                    <input type="text" id="promo-edit-offer" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-3 border" required maxlength="20">
+                    <div id="promo-edit-offer-counter" class="text-xs text-right text-gray-500 mt-1"></div>
                 </div>
                 <div>
                     <label for="promo-edit-validity" class="block text-sm font-medium text-gray-700">Data de Validade</label>

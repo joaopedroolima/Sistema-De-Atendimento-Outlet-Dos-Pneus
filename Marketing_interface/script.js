@@ -1,9 +1,32 @@
+// --- Imports do Firebase (NOVO) ---
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, getDocs, writeBatch, query, orderBy, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+
+// --- Configuração do Firebase (NOVO) ---
+const LOCAL_FIREBASE_CONFIG = {
+    apiKey: "AIzaSyDleQ5Y1-o7Uoo3zOXKIm35KljdxJuxvWo",
+    authDomain: "banco-de-dados-outlet2-0.firebaseapp.com",
+    projectId: "banco-de-dados-outlet2-0",
+    storageBucket: "banco-de-dados-outlet2-0.firebasestorage.app",
+    messagingSenderId: "917605669915",
+    appId: "1:917605669915:web:6a9ee233227cfd250bacbe",
+    measurementId: "G-5SZ5F2WKXD"
+};
+
+const app = initializeApp(LOCAL_FIREBASE_CONFIG);
+const db = getFirestore(app);
+const auth = getAuth(app);
+
 // --- Configuração da API (Cloudflare Worker) ---
 // IMPORTANTE: Substitua pela URL do seu Worker!
 const API_BASE_URL = 'https://marketing-api.lucasscosilva.workers.dev';
 
+// --- Constantes (NOVO) ---
+const APP_ID = 'local-autocenter-app';
+const PROMOTIONS_COLLECTION_PATH = `/artifacts/${APP_ID}/public/data/promotions`;
 
-// --- Elementos da UI ---
+// --- Elementos da UI (Mídia) ---
 const form = document.getElementById('marketing-form');
 const fileInput = document.getElementById('file-upload');
 const titleInput = document.getElementById('media-title');
@@ -14,15 +37,44 @@ const dropArea = document.getElementById('drop-area'); // Pode ser nulo se o HTM
 const fileNameDisplay = document.getElementById('file-name-display');
 const storageInfoDisplay = document.getElementById('storage-info-display');
 const progressBarContainer = document.getElementById('progress-bar-container');
-// NOVO: Elementos para configuração de duração
 const configForm = document.getElementById('config-form');
 const globalDurationInput = document.getElementById('global-duration');
-const intervalDurationInput = document.getElementById('interval-duration'); // NOVO: Input para o intervalo
+const intervalDurationInput = document.getElementById('interval-duration');
 const configMessage = document.getElementById('config-message');
-// NOVO: Elementos do modal de duração
 const editModal = document.getElementById('edit-modal');
 const editForm = document.getElementById('edit-form');
 let currentEditingMediaId = null; // Armazena o ID da mídia sendo editada
+
+// --- Elementos da UI (Promoções - NOVO) ---
+const promotionForm = document.getElementById('promotion-form');
+const promotionFormTitle = document.getElementById('promotion-form-title');
+const promoIdInput = document.getElementById('promotion-id');
+const promoTitleInput = document.getElementById('promo-title');
+const promoDescInput = document.getElementById('promo-description');
+const promoOfferInput = document.getElementById('promo-offer');
+const promoValidityInput = document.getElementById('promo-validity');
+const promoIconValueInput = document.getElementById('promo-icon-value'); // NOVO: Input hidden para o valor
+const promoIconSelectorBtn = document.getElementById('promo-icon-selector-btn'); // NOVO: Botão do seletor
+const promoIconOptions = document.getElementById('promo-icon-options'); // NOVO: Lista de opções
+const promoIconSelectedDisplay = document.getElementById('promo-icon-selected-display'); // NOVO: Display do item selecionado
+const promoCancelBtn = document.getElementById('promo-cancel-edit-btn');
+const promoFormMessage = document.getElementById('promo-form-message');
+const promotionsList = document.getElementById('promotions-list');
+const promoEmptyMessage = document.getElementById('promo-list-empty-message');
+
+// --- Elementos da UI (Modal de Edição de Promoção - NOVO) ---
+const promoEditModal = document.getElementById('promo-edit-modal');
+const promoEditForm = document.getElementById('promo-edit-form');
+const promoEditTitleInput = document.getElementById('promo-edit-title');
+const promoEditDescInput = document.getElementById('promo-edit-description');
+const promoEditOfferInput = document.getElementById('promo-edit-offer');
+const promoEditValidityInput = document.getElementById('promo-edit-validity');
+const promoEditIconInput = document.getElementById('promo-edit-icon');
+let currentEditingPromoId = null;
+
+// --- Elementos da UI (Abas - NOVO) ---
+const tabs = { media: document.getElementById('tab-media'), promotions: document.getElementById('tab-promotions') };
+const tabContents = { media: document.getElementById('tab-content-media'), promotions: document.getElementById('tab-content-promotions') };
 
 /**
  * Exibe uma mensagem para o usuário e a limpa após um tempo.
@@ -47,6 +99,20 @@ function showConfigMessage(text, isError = false) {
     configMessage.className = `mt-2 text-center text-sm font-medium ${isError ? 'text-red-600' : 'text-green-600'}`;
     setTimeout(() => {
         configMessage.textContent = '';
+    }, 4000);
+}
+
+/**
+ * NOVO: Exibe uma mensagem no formulário de promoções.
+ * @param {string} text - O texto da mensagem.
+ * @param {boolean} isError - Se a mensagem é de erro.
+ */
+function showPromoMessage(text, isError = false) {
+    promoFormMessage.textContent = text;
+    promoFormMessage.className = `mt-3 text-center text-sm font-medium ${isError ? 'text-red-600' : 'text-green-600'}`;
+    
+    setTimeout(() => {
+        promoFormMessage.textContent = '';
     }, 4000);
 }
 
@@ -244,6 +310,206 @@ function updateVideoDurations() {
     });
 }
 /**
+ * NOVO: Lógica de gerenciamento de promoções
+ */
+
+const PROMO_ICONS = {
+    'fa-solid fa-tag': 'Padrão (Tag)',
+    'fa-solid fa-car-battery': 'Bateria',
+    'fa-solid fa-oil-can': 'Troca de Óleo',
+    'fa-solid fa-ruler-combined': 'Alinhamento',
+    'fa-solid fa-truck-monster': 'Pneu Off-Road',
+    'fa-solid fa-car-burst': 'Suspensão',
+    'fa-solid fa-gears': 'Câmbio / Motor',
+    'fa-solid fa-fan': 'Ar Condicionado',
+    'fa-solid fa-car-on': 'Elétrica',
+    'fa-solid fa-lightbulb': 'Faróis',
+    'fa-solid fa-percent': 'Desconto (%)',
+    'fa-solid fa-gift': 'Brinde',
+    'fa-solid fa-screwdriver-wrench': 'Revisão'
+};
+
+/**
+ * NOVO: Popula o dropdown de ícones personalizado.
+ */
+function populateIconSelector() {
+    promoIconOptions.innerHTML = Object.entries(PROMO_ICONS).map(([className, name]) => `
+        <li class="text-gray-900 relative cursor-default select-none py-2 pl-3 pr-9 hover:bg-blue-600 hover:text-white" data-value="${className}">
+            <div class="flex items-center">
+                <i class="${className} w-5 h-5 text-center mr-3"></i>
+                <span class="font-normal block truncate">${name}</span>
+            </div>
+        </li>
+    `).join('');
+
+    // Define o valor padrão
+    const firstIconClass = Object.keys(PROMO_ICONS)[0];
+    const firstIconName = Object.values(PROMO_ICONS)[0];
+    promoIconValueInput.value = firstIconClass;
+    promoIconSelectedDisplay.innerHTML = `<i class="${firstIconClass} w-5 h-5 text-center mr-3 text-blue-600"></i> ${firstIconName}`;
+
+    // NOVO: Popula também o seletor do modal de edição
+    promoEditIconInput.innerHTML = Object.entries(PROMO_ICONS).map(([className, name]) => 
+        `<option value="${className}">${name}</option>`
+    ).join('');
+}
+
+/**
+ * NOVO: Configura os eventos para o dropdown de ícones.
+ */
+function setupIconSelector() {
+    promoIconSelectorBtn.addEventListener('click', () => {
+        promoIconOptions.classList.toggle('hidden');
+    });
+
+    promoIconOptions.addEventListener('click', (e) => {
+        const selectedLi = e.target.closest('li');
+        if (!selectedLi) return;
+        promoIconValueInput.value = selectedLi.dataset.value;
+        promoIconSelectedDisplay.innerHTML = selectedLi.querySelector('div').innerHTML;
+        promoIconOptions.classList.add('hidden');
+    });
+}
+
+function renderPromotionsList(promos) {
+    if (!promos || promos.length === 0) {
+        promotionsList.innerHTML = '';
+        promoEmptyMessage.classList.remove('hidden');
+        return;
+    }
+
+    promoEmptyMessage.classList.add('hidden');
+    promotionsList.innerHTML = promos.map(promo => {
+        let formattedDate = 'Sem validade';
+        if (promo.validity) {
+            try {
+                const [year, month, day] = promo.validity.split('-');
+                formattedDate = `Válido até ${day}/${month}/${year}`;
+            } catch (e) { formattedDate = 'Data inválida'; }
+        }
+
+        return `
+            <li class="p-4 flex justify-between items-center hover:bg-gray-50 cursor-grab" data-id="${promo.id}">
+                <div class="flex items-center flex-grow">
+                    <div class="w-16 h-16 bg-gray-100 rounded-md flex items-center justify-center mr-4 text-blue-600 text-3xl">
+                        <i class="${promo.icon || 'fa-solid fa-tag'}"></i>
+                    </div>
+                    <div class="flex-grow">
+                        <p class="text-sm font-bold text-gray-900">${promo.title}</p>
+                        <p class="text-sm text-gray-600">${promo.description}</p>
+                        <p class="text-sm font-medium text-blue-600 mt-1">${promo.offer}</p>
+                        <p class="text-xs text-gray-500 mt-1">${formattedDate}</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <button title="Editar" class="promo-edit-btn p-2 text-blue-500 hover:bg-blue-100 rounded-full"><svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.536L16.732 3.732z" /></svg></button>
+                    <button title="Excluir" class="promo-delete-btn p-2 text-red-500 hover:bg-red-100 rounded-full"><svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
+                </div>
+            </li>
+        `;
+    }).join('');
+}
+
+async function handlePromotionSubmit(e) {
+    e.preventDefault();
+    // ATUALIZADO: O formulário principal agora SÓ cria novas promoções.
+    // O bug de substituição é resolvido removendo a leitura do `promoIdInput`.
+    const id = doc(collection(db, PROMOTIONS_COLLECTION_PATH)).id;
+    
+    const promoData = {
+        title: promoTitleInput.value.trim(),
+        description: promoDescInput.value.trim(),
+        offer: promoOfferInput.value.trim(),
+        validity: promoValidityInput.value,
+        icon: promoIconValueInput.value // Usa o valor do input hidden
+    };
+
+    try {
+        // Descobre a ordem para o novo item
+        const q = query(collection(db, PROMOTIONS_COLLECTION_PATH));
+        const querySnapshot = await getDocs(q);
+        promoData.order = querySnapshot.size; // Adiciona no final da lista
+        
+        await setDoc(doc(db, PROMOTIONS_COLLECTION_PATH, id), promoData, { merge: true });
+        showPromoMessage("Promoção salva com sucesso!", false);
+        resetPromotionForm();
+    } catch (error) {
+        console.error("Erro ao salvar promoção:", error);
+        showPromoMessage("Erro ao salvar promoção.", true);
+    }
+}
+
+function resetPromotionForm() {
+    promotionForm.reset();
+    // ATUALIZADO: A lógica de "cancelar edição" foi removida deste formulário.
+    // Ele agora apenas se reseta após uma criação bem-sucedida.
+    const firstIconClass = Object.keys(PROMO_ICONS)[0];
+    promoIconValueInput.value = firstIconClass;
+    promoIconSelectedDisplay.innerHTML = `<i class="${firstIconClass} w-5 h-5 text-center mr-3 text-blue-600"></i> ${Object.values(PROMO_ICONS)[0]}`;
+}
+
+async function handlePromotionsListClick(e) {
+    const target = e.target;
+    const listItem = target.closest('li');
+    if (!listItem) return;
+
+    const promoId = listItem.dataset.id;
+    const promoDocRef = doc(db, PROMOTIONS_COLLECTION_PATH, promoId);
+
+    if (target.closest('.promo-delete-btn')) {
+        if (confirm("Tem certeza que deseja excluir esta promoção?")) {
+            try {
+                await deleteDoc(promoDocRef);
+                showPromoMessage("Promoção excluída com sucesso.");
+                // A lista será atualizada pelo listener onSnapshot
+            } catch (error) {
+                console.error("Erro ao excluir promoção:", error);
+                showPromoMessage("Erro ao excluir promoção.", true);
+            }
+        }
+    }
+
+    // ATUALIZADO: Lógica de edição agora abre o MODAL
+    if (target.closest('.promo-edit-btn')) {
+        currentEditingPromoId = promoId;
+
+        // Busca os dados do Firebase para preencher o modal
+        const promoData = (await getDoc(promoDocRef)).data();
+        
+        promoEditTitleInput.value = promoData.title || '';
+        promoEditDescInput.value = promoData.description || '';
+        promoEditOfferInput.value = promoData.offer || '';
+        promoEditValidityInput.value = promoData.validity || '';
+        promoEditIconInput.value = promoData.icon || '';
+
+        promoEditModal.classList.remove('hidden'); // Mostra o modal
+    }
+}
+
+function initPromotionsSortable() {
+    new Sortable(promotionsList, {
+        animation: 150,
+        ghostClass: 'bg-blue-100',
+        onEnd: async (evt) => {
+            const items = Array.from(promotionsList.querySelectorAll('li'));
+            const batch = writeBatch(db);
+
+            items.forEach((item, index) => {
+                const promoId = item.dataset.id;
+                const docRef = doc(db, PROMOTIONS_COLLECTION_PATH, promoId);
+                batch.update(docRef, { order: index });
+            });
+
+            try {
+                await batch.commit();
+            } catch (error) {
+                console.error("Erro ao reordenar promoções:", error);
+            }
+        },
+    });
+}
+
+/**
  * Lida com cliques na lista de mídia para exclusão ou atualização de status.
  * @param {Event} e - O evento de clique.
  */
@@ -376,10 +642,8 @@ async function updateMedia(mediaId, data) {
     }
 }
 
-// --- Listeners ---
+// --- Listeners de Mídia ---
 form.addEventListener('submit', handleFormSubmit);
-
-// Listener para seleção de arquivo (funciona para clique e drag-and-drop)
 fileInput.addEventListener('change', () => {
     updateFileDisplay(fileInput.files.length > 0 ? fileInput.files : null);
 });
@@ -395,7 +659,6 @@ fileInput.addEventListener('change', () => {
 
 mediaList.addEventListener('click', handleMediaListClick);
 
-// ATUALIZADO: Listener para o formulário do modal de edição
 editForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!currentEditingMediaId) return;
@@ -434,7 +697,6 @@ editForm.addEventListener('submit', async (e) => {
     }
 });
 
-// ATUALIZADO: Listener para o formulário de configuração (Duração e Intervalo)
 configForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const globalDuration = globalDurationInput.value.trim();
@@ -604,8 +866,91 @@ async function loadInitialMedia() {
     }
 }
 
-// Carrega os dados iniciais quando a página é carregada.
-loadInitialMedia();
-loadGlobalDuration(); // NOVO
-loadIntervalDuration(); // NOVO
-updateStorageInfo();
+/**
+ * NOVO: Gerencia a troca de abas
+ */
+function setupTabs() {
+    Object.values(tabs).forEach(tab => {
+        tab.addEventListener('click', () => {
+            // Desativa todas as abas e conteúdos
+            Object.values(tabs).forEach(t => t.classList.remove('border-blue-500', 'text-blue-600'));
+            Object.values(tabs).forEach(t => t.classList.add('border-transparent', 'text-gray-500', 'hover:text-gray-700', 'hover:border-gray-300'));
+            Object.values(tabContents).forEach(c => c.classList.add('hidden'));
+
+            // Ativa a aba clicada e seu conteúdo
+            tab.classList.add('border-blue-500', 'text-blue-600');
+            tab.classList.remove('border-transparent', 'text-gray-500', 'hover:text-gray-700', 'hover:border-gray-300');
+            const contentId = tab.id.replace('tab-', 'tab-content-');
+            document.getElementById(contentId).classList.remove('hidden');
+        });
+    });
+}
+
+/**
+ * NOVO: Inicialização do sistema
+ */
+function initializeSystem() {
+    // Carregamento da aba de Mídia
+    loadInitialMedia();
+    loadGlobalDuration();
+    loadIntervalDuration();
+    updateStorageInfo();
+
+    // Carregamento da aba de Promoções
+    populateIconSelector();
+    setupIconSelector(); // NOVO: Configura os eventos do seletor
+    promotionForm.addEventListener('submit', handlePromotionSubmit);
+    promotionsList.addEventListener('click', handlePromotionsListClick);
+    promoCancelBtn.addEventListener('click', resetPromotionForm);
+
+    // NOVO: Listeners para o modal de edição de promoção
+    promoEditForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (!currentEditingPromoId) return;
+
+        const promoData = {
+            title: promoEditTitleInput.value.trim(),
+            description: promoEditDescInput.value.trim(),
+            offer: promoEditOfferInput.value.trim(),
+            validity: promoEditValidityInput.value,
+            icon: promoEditIconInput.value
+        };
+
+        try {
+            const docRef = doc(db, PROMOTIONS_COLLECTION_PATH, currentEditingPromoId);
+            await setDoc(docRef, promoData, { merge: true }); // Usa merge para não sobrescrever o campo 'order'
+            showPromoMessage("Promoção atualizada com sucesso!");
+        } catch (error) {
+            console.error("Erro ao atualizar promoção:", error);
+            showPromoMessage("Erro ao atualizar promoção.", true);
+        } finally {
+            promoEditModal.classList.add('hidden');
+            currentEditingPromoId = null;
+        }
+    });
+
+    document.getElementById('promo-edit-cancel-btn').addEventListener('click', () => {
+        promoEditModal.classList.add('hidden');
+        currentEditingPromoId = null;
+    });
+    
+    // Listener em tempo real para promoções
+    const q = query(collection(db, PROMOTIONS_COLLECTION_PATH), orderBy("order"));
+    onSnapshot(q, (snapshot) => {
+        const promos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        renderPromotionsList(promos);
+        initPromotionsSortable();
+    });
+
+    // Configuração das abas
+    setupTabs();
+}
+
+// --- Ponto de Entrada ---
+onAuthStateChanged(auth, (user) => {
+    if (user) {
+        initializeSystem();
+    } else {
+        signInAnonymously(auth).catch(error => console.error("Falha no login anônimo:", error));
+    }
+});

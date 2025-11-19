@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-import { getFirestore, collection, onSnapshot, query, where } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+import { getFirestore, collection, onSnapshot, query, where, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
 // --- Configuração do Firebase (copiada do auth.js) ---
@@ -22,6 +22,7 @@ const APP_ID = 'local-autocenter-app';
 const CLIENT_ROLE = 'cliente';
 const SERVICE_COLLECTION_PATH = `/artifacts/${APP_ID}/public/data/serviceJobs`;
 const ALIGNMENT_COLLECTION_PATH = `/artifacts/${APP_ID}/public/data/alignmentQueue`;
+const PROMOTIONS_COLLECTION_PATH = `/artifacts/${APP_ID}/public/data/promotions`; // NOVO: Caminho para a coleção de promoções
 
 // Status do Sistema Operacional
 const STATUS_PENDING = 'Pendente';
@@ -135,6 +136,21 @@ function setupRealtimeListeners() {
         console.error("Erro ao ouvir fila de alinhamento:", error);
         document.getElementById('ongoing-services-table').innerHTML += `<tr><td colspan="4">Erro ao carregar dados.</td></tr>`;
     });
+
+    // NOVO: Listener para a coleção de promoções
+    const promotionsQuery = query(
+        collection(db, PROMOTIONS_COLLECTION_PATH),
+        orderBy("order") // ATUALIZADO: Pede ao Firebase para ordenar os resultados
+    );
+
+    onSnapshot(promotionsQuery, (snapshot) => {
+        const promotions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        // A ordenação agora é feita diretamente na consulta do Firestore, não é mais necessário o sort() aqui.
+        renderPromotions(promotions);
+    }, (error) => {
+        console.error("Erro ao ouvir promoções:", error);
+        document.getElementById('promotions-list').innerHTML = `<p class="error-message">Erro ao carregar promoções.</p>`;
+    });
 }
 
 /**
@@ -230,6 +246,48 @@ function renderReadyList(items) {
             <td><span class="status-badge ready">Pronto</span></td>
         </tr>
     `).join('');
+}
+
+/**
+ * NOVO: Renderiza a lista de promoções na barra lateral.
+ * @param {Array} promotions - A lista de promoções do Firestore.
+ */
+function renderPromotions(promotions) {
+    const listContainer = document.getElementById('promotions-list');
+    if (!listContainer) return;
+
+    if (promotions.length === 0) {
+        listContainer.innerHTML = `<div class="promo-card-empty"><p>Nenhuma promoção ativa no momento.</p></div>`;
+        return;
+    }
+
+    listContainer.innerHTML = promotions.map(promo => {
+        // Formata a data de validade de 'YYYY-MM-DD' para 'DD/MM/YYYY'
+        let formattedDate = 'Sem validade';
+        if (promo.validity) {
+            try {
+                const [year, month, day] = promo.validity.split('-');
+                formattedDate = `Válido até ${day}/${month}/${year}`;
+            } catch (e) {
+                console.warn(`Data de validade em formato inválido: ${promo.validity}`);
+                formattedDate = 'Validade indeterminada';
+            }
+        }
+
+        // O ícone vem do DB, ex: "fa-solid fa-truck-monster"
+        const iconClass = promo.icon || 'fa-solid fa-tags';
+
+        return `
+            <div class="promo-card">
+                <div class="promo-icon"><i class="${iconClass}"></i></div>
+                <div class="promo-details">
+                    <p class="promo-title">${promo.title || 'Promoção'}</p>
+                    <p class="promo-description">${promo.description || ''}</p>
+                    <p class="promo-offer">${promo.offer || ''}</p>
+                    <p class="promo-validity">${formattedDate}</p>
+                </div>
+            </div>`;
+    }).join('');
 }
 
 /**
@@ -485,7 +543,7 @@ document.addEventListener('DOMContentLoaded', () => {
     renderDisplay = (...args) => {
         originalRender.apply(this, args);
         if (isFirstRender) {
-            document.querySelectorAll('.table-container, .promotions-list').forEach(el => ScrollManager.init(el));
+            document.querySelectorAll('.table-container, #promotions-list').forEach(el => ScrollManager.init(el));
             isFirstRender = false;
         }
     };

@@ -79,13 +79,13 @@ html, body {
 .main-body {
     display: flex;
     flex-grow: 1;
-    padding: 1.5rem 0; /* Remove o padding lateral para o conteúdo ir até as bordas */
+    padding: 1.5rem; /* Adiciona um espaçamento nas laterais */
     gap: 1.5rem;
     overflow: hidden;
 }
 
 .services-column {
-    flex: 0 0 75%; /* Aumenta o espaço para comportar as duas colunas de serviço */
+    flex-basis: calc(75% - 1.5rem); /* Subtrai o gap para o cálculo correto da largura */
     display: flex;
     flex-direction: column;
     gap: 1.5rem;
@@ -100,7 +100,7 @@ html, body {
 }
 
 .promotions-column {
-    flex: 0 0 25%; /* Diminui o espaço para dar lugar à nova organização */
+    flex-basis: 25%;
     overflow: hidden;
 }
 
@@ -131,11 +131,11 @@ html, body {
 
 /* Coluna da Esquerda (Serviços) */
 .ongoing-services {
-    flex: 0 0 65%; /* Ocupa 65% do espaço no services-container */
+    flex-basis: calc(65% - 0.75rem); /* Ajusta a largura para compensar o gap */
 }
 
 .completed-services {
-    flex: 0 0 35%; /* Ocupa 35% do espaço no services-container */
+    flex-basis: calc(35% - 0.75rem); /* Ajusta a largura para compensar o gap */
 }
 
 .ongoing-services .section-header { background-color: var(--blue-dark); }

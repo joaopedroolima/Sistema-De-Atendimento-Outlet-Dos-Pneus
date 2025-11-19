@@ -43,6 +43,54 @@ export default {
 		}
 
 		try {
+			// ============================================
+			// ROTAS DE CONFIGURAÇÃO
+			// ============================================
+
+			// GET /config/:key - Buscar configuração
+			if (request.method === 'GET' && url.pathname.startsWith('/config/')) {
+				const key = url.pathname.split('/')[2];
+				
+				if (!key) {
+					return errorResponse('Chave de configuração não fornecida.', 400, corsHeaders);
+				}
+				
+				const result = await env.D1_DATABASE.prepare(
+					'SELECT value FROM config WHERE key = ?'
+				).bind(key).first<{ value: string }>();
+				
+				return jsonResponse(result || {}, 200, corsHeaders);
+			}
+
+			// PUT /config/:key - Salvar/atualizar configuração
+			if (request.method === 'PUT' && url.pathname.startsWith('/config/')) {
+				const key = url.pathname.split('/')[2];
+				
+				if (!key) {
+					return errorResponse('Chave de configuração não fornecida.', 400, corsHeaders);
+				}
+				
+				const { value } = await request.json<{ value: string }>();
+				
+				if (!value) {
+					return errorResponse('Valor não fornecido.', 400, corsHeaders);
+				}
+
+				await env.D1_DATABASE.prepare(
+					'INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)'
+				).bind(key, value).run();
+				
+				return jsonResponse({ 
+					message: 'Configuração salva com sucesso!',
+					key: key,
+					value: value
+				}, 200, corsHeaders);
+			}
+
+			// ============================================
+			// ROTAS DE MÍDIA
+			// ============================================
+
 			// Rota para LISTAR todas as mídias
 			if (request.method === 'GET' && url.pathname === '/media') {
 				const { results } = await env.D1_DATABASE.prepare('SELECT * FROM media ORDER BY media_order ASC').all();
@@ -138,16 +186,16 @@ export default {
 				return jsonResponse({ message: 'Ordem atualizada com sucesso' }, 200, corsHeaders);
 			}
 
-			// Rota para ATUALIZAR status ou título de uma mídia específica
+			// Rota para ATUALIZAR status, título ou duration de uma mídia específica
 			if (request.method === 'PUT' && url.pathname.startsWith('/media/')) {
 				const id = url.pathname.split('/')[2];
 				if (!id) {
 					return errorResponse('ID da mídia não fornecido.', 400, corsHeaders);
 				}
 
-				const body = await request.json<{ status?: string; title?: string; }>();
+				const body = await request.json<{ status?: string; title?: string; duration?: number | null; }>();
 				const updates: string[] = [];
-				const values: (string|number)[] = [];
+				const values: (string|number|null)[] = [];
 
 				if (body.status) {
 					updates.push('status = ?');
@@ -156,6 +204,10 @@ export default {
 				if (body.title) {
 					updates.push('title = ?');
 					values.push(body.title);
+				}
+				if (body.duration !== undefined) {
+					updates.push('duration = ?');
+					values.push(body.duration);
 				}
 
 				if (updates.length === 0) {

@@ -388,7 +388,9 @@ function showNextAd() {
             const video = document.createElement('video'); // RF005
             video.src = ad.url;
             video.autoplay = true;
-            video.muted = true; // Autoplay com som geralmente é bloqueado
+            // O som foi ativado conforme solicitado.
+            // Nota: A reprodução automática com som pode ser bloqueada por políticas do navegador.
+            video.muted = false;
             video.playsInline = true;
             // O vídeo não deve ser em loop para que o evento 'onended' funcione corretamente.
             adElement = video;

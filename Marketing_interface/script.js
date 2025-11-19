@@ -2,6 +2,7 @@
 // IMPORTANTE: Substitua pela URL do seu Worker!
 const API_BASE_URL = 'https://marketing-api.lucasscosilva.workers.dev';
 
+
 // --- Elementos da UI ---
 const form = document.getElementById('marketing-form');
 const fileInput = document.getElementById('file-upload');
@@ -9,10 +10,18 @@ const titleInput = document.getElementById('media-title');
 const uploadMessage = document.getElementById('upload-message');
 const mediaList = document.getElementById('media-list');
 const emptyMessage = document.getElementById('media-list-empty-message');
-const dropArea = document.getElementById('drop-area');
+const dropArea = document.getElementById('drop-area'); // Pode ser nulo se o HTML mudar
 const fileNameDisplay = document.getElementById('file-name-display');
 const storageInfoDisplay = document.getElementById('storage-info-display');
 const progressBarContainer = document.getElementById('progress-bar-container');
+// NOVO: Elementos para configuração de duração
+const configForm = document.getElementById('config-form');
+const globalDurationInput = document.getElementById('global-duration');
+const configMessage = document.getElementById('config-message');
+// NOVO: Elementos do modal de duração
+const editModal = document.getElementById('edit-modal');
+const editForm = document.getElementById('edit-form');
+let currentEditingMediaId = null; // Armazena o ID da mídia sendo editada
 
 /**
  * Exibe uma mensagem para o usuário e a limpa após um tempo.
@@ -28,11 +37,24 @@ function showUserMessage(text, isError = false) {
 }
 
 /**
+ * NOVO: Exibe uma mensagem no card de configuração.
+ * @param {string} text - O texto da mensagem.
+ * @param {boolean} isError - Se a mensagem é de erro.
+ */
+function showConfigMessage(text, isError = false) {
+    configMessage.textContent = text;
+    configMessage.className = `mt-2 text-center text-sm font-medium ${isError ? 'text-red-600' : 'text-green-600'}`;
+    setTimeout(() => {
+        configMessage.textContent = '';
+    }, 4000);
+}
+
+/**
  * Atualiza a UI para mostrar o nome do arquivo selecionado.
  * @param {File} file - O arquivo selecionado.
  */
 function updateFileDisplay(file) {
-    if (!file) {
+    if (!fileNameDisplay || !file) {
         fileNameDisplay.textContent = '';
     } else if (file.length === 1) {
         fileNameDisplay.textContent = `Arquivo selecionado: ${file[0].name}`;
@@ -40,6 +62,26 @@ function updateFileDisplay(file) {
         fileNameDisplay.textContent = `${file.length} arquivos selecionados.`;
     }
     uploadMessage.textContent = ''; // Limpa mensagens anteriores
+}
+
+/**
+ * NOVO: Obtém a duração de um arquivo de vídeo.
+ * @param {File} file - O arquivo de vídeo.
+ * @returns {Promise<number>} Uma promessa que resolve com a duração do vídeo em segundos.
+ */
+function getVideoDuration(file) {
+    return new Promise((resolve, reject) => {
+        const video = document.createElement('video');
+        video.preload = 'metadata';
+        video.onloadedmetadata = function() {
+            window.URL.revokeObjectURL(video.src);
+            resolve(Math.round(video.duration));
+        }
+        video.onerror = function() {
+            reject("Erro ao carregar metadados do vídeo.");
+        };
+        video.src = URL.createObjectURL(file);
+    });
 }
 
 /**
@@ -62,12 +104,22 @@ async function handleFormSubmit(e) {
         // Para múltiplos arquivos, usamos o nome do arquivo como título.
         // Se apenas um arquivo for enviado, usamos o título do input.
         const fileTitle = files.length > 1 ? file.name.split('.').slice(0, -1).join('.') : title || file.name.split('.').slice(0, -1).join('.');
-        
+
+        // NOVO: Obtém a duração se for um vídeo
+        let duration = null;
+        if (file.type.startsWith('video/')) {
+            try {
+                duration = await getVideoDuration(file);
+            } catch (error) {
+                console.error("Não foi possível obter a duração do vídeo:", error);
+            }
+        }
+
         // Criamos uma div para a barra de progresso de cada arquivo
         const progressElement = document.createElement('div');
         progressBarContainer.appendChild(progressElement);
 
-        uploadPromises.push(uploadFileWithProgress(file, fileTitle, progressElement, i + 1, files.length));
+        uploadPromises.push(uploadFileWithProgress(file, fileTitle, duration, progressElement, i + 1, files.length));
     }
 
     await Promise.all(uploadPromises);
@@ -88,11 +140,12 @@ async function handleFormSubmit(e) {
  * Faz o upload de um único arquivo com uma barra de progresso.
  * @param {File} file - O arquivo para upload.
  * @param {string} title - O título da mídia.
+ * @param {number|null} duration - A duração do vídeo, se aplicável.
  * @param {HTMLElement} progressElement - O elemento que conterá a barra de progresso.
  * @param {number} fileNumber - O número do arquivo atual (ex: 1).
  * @param {number} totalFiles - O número total de arquivos.
  */
-function uploadFileWithProgress(file, title, progressElement, fileNumber, totalFiles) {
+function uploadFileWithProgress(file, title, duration, progressElement, fileNumber, totalFiles) {
     return new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         const formData = new FormData();
@@ -100,6 +153,7 @@ function uploadFileWithProgress(file, title, progressElement, fileNumber, totalF
         formData.append('file', file);
         formData.append('title', title);
         formData.append('contentType', file.type);
+        if (duration) formData.append('duration', duration); // NOVO: Adiciona a duração ao formulário
 
         xhr.open('POST', `${API_BASE_URL}/media`, true);
 
@@ -137,7 +191,7 @@ function uploadFileWithProgress(file, title, progressElement, fileNumber, totalF
  * @param {Array} mediaItems - Array de documentos de mídia do Firestore.
  */
 function renderMediaList(mediaItems) {
-    if (mediaItems.length === 0) {
+    if (!mediaItems || mediaItems.length === 0) {
         mediaList.innerHTML = '';
         emptyMessage.classList.remove('hidden');
         return;
@@ -145,7 +199,7 @@ function renderMediaList(mediaItems) {
 
     emptyMessage.classList.add('hidden');
     mediaList.innerHTML = mediaItems.map((item, index) => {
-        const { id, title, type, url, status } = item;
+        const { id, title, type, url, status, duration } = item;
 
         const isImage = type === 'Imagem';
         const thumbnailHTML = isImage
@@ -157,13 +211,24 @@ function renderMediaList(mediaItems) {
                  </svg>
                </div>`;
 
+        // REFORMULADO: Lógica de duração separada para vídeos e imagens.
+        let durationHTML = '';
+        if (type === 'Vídeo') {
+            // Para vídeos, a duração é inerente ao arquivo. Se existir, mostramos.
+            // Não há fallback para "Padrão".
+            durationHTML = `<p class="text-xs text-gray-500 mt-1">Duração: ${duration ? `${duration}s` : 'N/A'}</p>`;
+        } else {
+            // Para imagens e GIFs, a lógica original é mantida.
+            durationHTML = `<p class="text-xs text-gray-500 mt-1">Duração: ${duration ? `${duration}s` : 'Padrão'}</p>`;
+        }
+
         return `
-            <li class="p-4 flex justify-between items-center hover:bg-gray-50 cursor-grab" data-id="${id}" data-url="${url}">
+            <li class="p-4 flex justify-between items-center hover:bg-gray-50 cursor-grab" data-id="${id}" data-url="${url}" data-title="${title}" data-duration="${duration || ''}">
                 <div class="flex items-center flex-grow">
                     <div class="w-24 h-16 bg-gray-200 rounded-md flex items-center justify-center mr-4">${thumbnailHTML}</div>
                     <div>
                         <p class="text-sm font-medium text-gray-900 media-title-text">${title}</p>
-                        <p class="text-sm text-gray-500">${type} - ${status}</p>
+                        <p class="text-sm text-gray-500">${type} - ${status}</p>${durationHTML}
                     </div>
                 </div>
                 <div class="flex items-center space-x-3">
@@ -172,9 +237,7 @@ function renderMediaList(mediaItems) {
                         <input type="checkbox" name="toggle" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer" ${status === 'ativo' ? 'checked' : ''}/>
                         <label class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-300 cursor-pointer"></label>
                     </div>
-                    <button title="Editar" class="p-2 text-blue-500 hover:bg-blue-100 rounded-full">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.536L16.732 3.732z" /></svg>
-                    </button>
+                    <button title="Editar" class="edit-btn p-2 text-blue-500 hover:bg-blue-100 rounded-full"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.536L16.732 3.732z" /></svg></button>
                     <button title="Excluir" class="p-2 text-red-500 hover:bg-red-100 rounded-full">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                     </button>
@@ -244,28 +307,15 @@ async function handleMediaListClick(e) {
         }
     }
 
-    // --- Lógica para o botão de editar ---
-    if (target.closest('button[title="Editar"]')) {
-        const titleElement = listItem.querySelector('.media-title-text');
-        const currentTitle = titleElement.textContent;
+    // --- Lógica para o botão de editar (título e duração) ---
+    if (target.closest('.edit-btn')) {
+        currentEditingMediaId = mediaId;
+        const currentTitle = listItem.dataset.title;
+        const currentDuration = listItem.dataset.duration;
 
-        const newTitle = prompt("Digite o novo título para a mídia:", currentTitle);
-
-        // Se o usuário não cancelar e o título for diferente
-        if (newTitle !== null && newTitle.trim() !== currentTitle) {
-            try {
-                await fetch(`${API_BASE_URL}/media/${mediaId}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ title: newTitle.trim() || "Sem título" })
-                });
-                showUserMessage("Título atualizado com sucesso.");
-                titleElement.textContent = newTitle.trim() || "Sem título"; // Atualiza o título na UI sem recarregar tudo
-            } catch (error) {
-                console.error("Erro ao atualizar título:", error);
-                showUserMessage("Erro ao atualizar o título.", true);
-            }
-        }
+        document.getElementById('edit-media-title').value = currentTitle;
+        document.getElementById('edit-media-duration').value = currentDuration;
+        editModal.classList.remove('hidden');
     }
 }
 
@@ -299,6 +349,26 @@ function initSortable() {
         },
     });
 }
+
+/**
+ * NOVO: Função genérica para atualizar mídia.
+ * @param {string} mediaId - O ID da mídia.
+ * @param {object} data - O objeto com os dados a serem atualizados.
+ */
+async function updateMedia(mediaId, data) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/media/${mediaId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        if (!response.ok) throw new Error('A resposta da API não foi OK');
+    } catch (error) {
+        console.error(`Erro ao atualizar mídia ${mediaId}:`, error);
+        throw error; // Propaga o erro para ser tratado pela função que chamou
+    }
+}
+
 // --- Listeners ---
 form.addEventListener('submit', handleFormSubmit);
 
@@ -318,12 +388,99 @@ fileInput.addEventListener('change', () => {
 
 mediaList.addEventListener('click', handleMediaListClick);
 
+// ATUALIZADO: Listener para o formulário do modal de edição
+editForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!currentEditingMediaId) return;
+
+    const newTitle = document.getElementById('edit-media-title').value.trim();
+    const newDuration = document.getElementById('edit-media-duration').value;
+
+    const durationValue = newDuration.trim() === '' ? null : parseInt(newDuration, 10);
+
+    if (newDuration.trim() !== '' && (isNaN(durationValue) || durationValue <= 0)) {
+        showUserMessage("Por favor, insira um número válido maior que zero.", true);
+        return;
+    }
+
+    const dataToUpdate = {
+        title: newTitle || "Sem título",
+        duration: durationValue
+    };
+
+    try {
+        await updateMedia(currentEditingMediaId, dataToUpdate);
+        showUserMessage("Mídia atualizada com sucesso.");
+        loadInitialMedia(); // Recarrega para refletir a mudança
+    } catch (error) {
+        showUserMessage("Erro ao atualizar a mídia.", true);
+    } finally {
+        editModal.classList.add('hidden');
+        currentEditingMediaId = null;
+        editForm.reset();
+    }
+});
+
+// NOVO: Listener para o formulário de configuração global
+configForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const duration = globalDurationInput.value;
+
+    if (duration && (isNaN(parseInt(duration, 10)) || parseInt(duration, 10) <= 0)) {
+        showConfigMessage("Por favor, insira um número válido maior que zero.", true);
+        return;
+    }
+
+    try {
+        // CORREÇÃO: O endpoint deve especificar a chave que está sendo alterada ('duration').
+        // CORREÇÃO 2: Voltando a usar o endpoint /config/value conforme especificado pelo usuário.
+        // O corpo envia apenas o valor, conforme a lógica do backend.
+        const response = await fetch(`${API_BASE_URL}/config/value`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ value: duration })
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ message: 'Falha ao salvar a configuração.' }));
+            throw new Error(errorData.message || 'Falha ao salvar a configuração.');
+        }
+
+        const result = await response.json();
+        showConfigMessage(result.message || "Tempo de exibição padrão salvo com sucesso!");
+    } catch (error) {
+        console.error("Erro ao salvar configuração:", error);
+        showConfigMessage(error.message, true);
+    }
+});
+
+/**
+ * NOVO: Carrega a configuração de duração global da API.
+ */
+async function loadGlobalDuration() {
+    try {
+        // CORREÇÃO: Voltando a usar o endpoint /config/value para carregar a configuração.
+        const response = await fetch(`${API_BASE_URL}/config/value`);
+        if (response.ok) {
+            const config = await response.json();
+            if (config && config.value) {
+                globalDurationInput.value = config.value;
+            }
+        }
+        // Se a resposta não for ok (ex: 404), simplesmente não preenche o campo.
+    } catch (error) {
+        console.error("Erro ao carregar a configuração de duração global:", error);
+    }
+}
+
 /**
  * Busca as informações de armazenamento da API e atualiza a UI.
  */
 async function updateStorageInfo() {
+    if (!storageInfoDisplay) return; // Se o elemento não existe, não faz nada.
+
     try {
-        const response = await fetch(`${API_BASE_URL}/storage-info`);
+        const response = await fetch(`${API_BASE_URL}/storage-info`); // RF009
         if (!response.ok) {
             storageInfoDisplay.innerHTML = `<p class="text-sm text-red-500">Erro ao buscar dados de uso.</p>`;
             return;
@@ -372,7 +529,7 @@ async function loadInitialMedia() {
         if (!response.ok) {
             throw new Error('Não foi possível carregar a lista de mídias.');
         }
-        const mediaItems = await response.json();
+        const mediaItems = await response.json(); // RF003
         renderMediaList(mediaItems);
         if (mediaItems.length > 0) {
             initSortable();
@@ -385,4 +542,5 @@ async function loadInitialMedia() {
 
 // Carrega os dados iniciais quando a página é carregada.
 loadInitialMedia();
+loadGlobalDuration(); // NOVO
 updateStorageInfo();

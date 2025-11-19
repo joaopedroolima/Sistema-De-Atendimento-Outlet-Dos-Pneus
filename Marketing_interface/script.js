@@ -17,6 +17,7 @@ const progressBarContainer = document.getElementById('progress-bar-container');
 // NOVO: Elementos para configuração de duração
 const configForm = document.getElementById('config-form');
 const globalDurationInput = document.getElementById('global-duration');
+const intervalDurationInput = document.getElementById('interval-duration'); // NOVO: Input para o intervalo
 const configMessage = document.getElementById('config-message');
 // NOVO: Elementos do modal de duração
 const editModal = document.getElementById('edit-modal');
@@ -65,26 +66,6 @@ function updateFileDisplay(file) {
 }
 
 /**
- * NOVO: Obtém a duração de um arquivo de vídeo.
- * @param {File} file - O arquivo de vídeo.
- * @returns {Promise<number>} Uma promessa que resolve com a duração do vídeo em segundos.
- */
-function getVideoDuration(file) {
-    return new Promise((resolve, reject) => {
-        const video = document.createElement('video');
-        video.preload = 'metadata';
-        video.onloadedmetadata = function() {
-            window.URL.revokeObjectURL(video.src);
-            resolve(Math.round(video.duration));
-        }
-        video.onerror = function() {
-            reject("Erro ao carregar metadados do vídeo.");
-        };
-        video.src = URL.createObjectURL(file);
-    });
-}
-
-/**
  * Lida com o envio do formulário para adicionar nova mídia.
  * @param {Event} e - O evento de submit.
  */
@@ -105,21 +86,11 @@ async function handleFormSubmit(e) {
         // Se apenas um arquivo for enviado, usamos o título do input.
         const fileTitle = files.length > 1 ? file.name.split('.').slice(0, -1).join('.') : title || file.name.split('.').slice(0, -1).join('.');
 
-        // NOVO: Obtém a duração se for um vídeo
-        let duration = null;
-        if (file.type.startsWith('video/')) {
-            try {
-                duration = await getVideoDuration(file);
-            } catch (error) {
-                console.error("Não foi possível obter a duração do vídeo:", error);
-            }
-        }
-
         // Criamos uma div para a barra de progresso de cada arquivo
         const progressElement = document.createElement('div');
         progressBarContainer.appendChild(progressElement);
 
-        uploadPromises.push(uploadFileWithProgress(file, fileTitle, duration, progressElement, i + 1, files.length));
+        uploadPromises.push(uploadFileWithProgress(file, fileTitle, progressElement, i + 1, files.length));
     }
 
     await Promise.all(uploadPromises);
@@ -140,12 +111,11 @@ async function handleFormSubmit(e) {
  * Faz o upload de um único arquivo com uma barra de progresso.
  * @param {File} file - O arquivo para upload.
  * @param {string} title - O título da mídia.
- * @param {number|null} duration - A duração do vídeo, se aplicável.
  * @param {HTMLElement} progressElement - O elemento que conterá a barra de progresso.
  * @param {number} fileNumber - O número do arquivo atual (ex: 1).
  * @param {number} totalFiles - O número total de arquivos.
  */
-function uploadFileWithProgress(file, title, duration, progressElement, fileNumber, totalFiles) {
+function uploadFileWithProgress(file, title, progressElement, fileNumber, totalFiles) {
     return new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         const formData = new FormData();
@@ -153,7 +123,6 @@ function uploadFileWithProgress(file, title, duration, progressElement, fileNumb
         formData.append('file', file);
         formData.append('title', title);
         formData.append('contentType', file.type);
-        if (duration) formData.append('duration', duration); // NOVO: Adiciona a duração ao formulário
 
         xhr.open('POST', `${API_BASE_URL}/media`, true);
 
@@ -212,22 +181,18 @@ function renderMediaList(mediaItems) {
                </div>`;
 
         // REFORMULADO: Lógica de duração separada para vídeos e imagens.
+        // A duração do vídeo será adicionada dinamicamente após a renderização.
         let durationHTML = '';
-        if (type === 'Vídeo') {
-            // Para vídeos, a duração é inerente ao arquivo. Se existir, mostramos.
-            // Não há fallback para "Padrão".
-            durationHTML = `<p class="text-xs text-gray-500 mt-1">Duração: ${duration ? `${duration}s` : 'N/A'}</p>`;
-        } else {
-            // Para imagens e GIFs, a lógica original é mantida.
-            durationHTML = `<p class="text-xs text-gray-500 mt-1">Duração: ${duration ? `${duration}s` : 'Padrão'}</p>`;
+        if (type === 'Imagem') {
+            durationHTML = `<p class="text-xs text-gray-500 mt-1">Duração: ${duration ? `${duration}s` : 'Padrão do sistema'}</p>`;
         }
 
         return `
-            <li class="p-4 flex justify-between items-center hover:bg-gray-50 cursor-grab" data-id="${id}" data-url="${url}" data-title="${title}" data-duration="${duration || ''}">
+            <li class="p-4 flex justify-between items-center hover:bg-gray-50 cursor-grab" data-id="${id}" data-url="${url}" data-title="${title}" data-duration="${duration || ''}" data-type="${type}">
                 <div class="flex items-center flex-grow">
                     <div class="w-24 h-16 bg-gray-200 rounded-md flex items-center justify-center mr-4">${thumbnailHTML}</div>
                     <div>
-                        <p class="text-sm font-medium text-gray-900 media-title-text">${title}</p>
+                        <p class="text-sm font-medium text-gray-900 media-title-text">${title}</p> 
                         <p class="text-sm text-gray-500">${type} - ${status}</p>${durationHTML}
                     </div>
                 </div>
@@ -247,6 +212,37 @@ function renderMediaList(mediaItems) {
     }).join('');
 }
 
+/**
+ * NOVO: Percorre a lista de mídias renderizada e atualiza a duração dos vídeos.
+ * Isso é feito após a renderização inicial, pois requer a criação de elementos de vídeo
+ * para ler seus metadados (duração).
+ */
+function updateVideoDurations() {
+    const mediaItems = mediaList.querySelectorAll('li[data-type="Vídeo"]');
+
+    mediaItems.forEach(item => {
+        const videoUrl = item.dataset.url;
+        if (!videoUrl) return;
+
+        // Cria um elemento de vídeo temporário para carregar os metadados
+        const video = document.createElement('video');
+        video.preload = 'metadata'; // Otimização: só precisamos dos metadados
+
+        // Quando os metadados (incluindo a duração) estiverem prontos...
+        video.onloadedmetadata = () => {
+            const duration = video.duration;
+            const minutes = Math.floor(duration / 60);
+            const seconds = Math.round(duration % 60);
+            const formattedDuration = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+
+            // Encontra o local para inserir a duração e a adiciona
+            const infoContainer = item.querySelector('.text-sm.text-gray-500');
+            infoContainer.insertAdjacentHTML('afterend', `<p class="text-xs text-gray-500 mt-1">Duração: ${formattedDuration}</p>`);
+        };
+
+        video.src = videoUrl; // Define a fonte, o que dispara o carregamento
+    });
+}
 /**
  * Lida com cliques na lista de mídia para exclusão ou atualização de status.
  * @param {Event} e - O evento de clique.
@@ -311,11 +307,22 @@ async function handleMediaListClick(e) {
     if (target.closest('.edit-btn')) {
         currentEditingMediaId = mediaId;
         const currentTitle = listItem.dataset.title;
+        const mediaType = listItem.dataset.type; // NOVO: Pega o tipo de mídia
         const currentDuration = listItem.dataset.duration;
+        
+        const durationContainer = document.getElementById('edit-duration-container');
 
         document.getElementById('edit-media-title').value = currentTitle;
         document.getElementById('edit-media-duration').value = currentDuration;
-        editModal.classList.remove('hidden');
+
+        // ATUALIZADO: Mostra ou esconde o campo de duração baseado no tipo
+        if (mediaType === 'Vídeo') {
+            durationContainer.classList.add('hidden');
+        } else {
+            durationContainer.classList.remove('hidden');
+        }
+
+        editModal.classList.remove('hidden'); // Mostra o modal
     }
 }
 
@@ -396,13 +403,19 @@ editForm.addEventListener('submit', async (e) => {
     const newTitle = document.getElementById('edit-media-title').value.trim();
     const newDuration = document.getElementById('edit-media-duration').value;
 
-    const durationValue = newDuration.trim() === '' ? null : parseInt(newDuration, 10);
+    let durationValue = null;
+    // ATUALIZADO: Só processa a duração se o campo estiver visível
+    const durationContainer = document.getElementById('edit-duration-container');
+    if (!durationContainer.classList.contains('hidden')) {
+        durationValue = newDuration.trim() === '' ? null : parseInt(newDuration, 10);
 
-    if (newDuration.trim() !== '' && (isNaN(durationValue) || durationValue <= 0)) {
-        showUserMessage("Por favor, insira um número válido maior que zero.", true);
-        return;
+        // Valida a duração apenas se ela foi inserida
+        if (newDuration.trim() !== '' && (isNaN(durationValue) || durationValue <= 0)) {
+            showUserMessage("Por favor, insira um número válido maior que zero para a duração.", true);
+            return;
+        }
     }
-
+    
     const dataToUpdate = {
         title: newTitle || "Sem título",
         duration: durationValue
@@ -421,36 +434,67 @@ editForm.addEventListener('submit', async (e) => {
     }
 });
 
-// NOVO: Listener para o formulário de configuração global
+// ATUALIZADO: Listener para o formulário de configuração (Duração e Intervalo)
 configForm.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const duration = globalDurationInput.value;
+    const globalDuration = globalDurationInput.value.trim();
+    const intervalDuration = intervalDurationInput.value.trim();
 
-    if (duration && (isNaN(parseInt(duration, 10)) || parseInt(duration, 10) <= 0)) {
-        showConfigMessage("Por favor, insira um número válido maior que zero.", true);
+    // Validação dos inputs: só valida se o campo foi de fato preenchido
+    if (globalDuration && (isNaN(parseInt(globalDuration, 10)) || parseInt(globalDuration, 10) <= 0)) {
+        showConfigMessage("Duração Global: Por favor, insira um número válido maior que zero.", true);
+        return;
+    }
+    if (intervalDuration && (isNaN(parseInt(intervalDuration, 10)) || parseInt(intervalDuration, 10) <= 0)) {
+        showConfigMessage("Intervalo: Por favor, insira um número válido maior que zero.", true);
         return;
     }
 
-    try {
-        // CORREÇÃO: O endpoint deve especificar a chave que está sendo alterada ('duration').
-        // CORREÇÃO 2: Voltando a usar o endpoint /config/value conforme especificado pelo usuário.
-        // O corpo envia apenas o valor, conforme a lógica do backend.
-        const response = await fetch(`${API_BASE_URL}/config/value`, {
+    const promises = [];
+    let success = true;
+
+    // Se nenhum campo foi preenchido, informa o usuário e não faz nada
+    if (!globalDuration && !intervalDuration) {
+        showConfigMessage("Nenhum valor para salvar.", true);
+        return;
+    }
+
+    // Mostra uma mensagem de "Salvando..."
+    showConfigMessage("Salvando configurações...", false);
+
+    // Adiciona a promise para salvar a Duração Global, se o campo foi preenchido
+    if (globalDuration) {
+        const durationPromise = fetch(`${API_BASE_URL}/config/value`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ value: duration })
-        });
+            body: JSON.stringify({ value: globalDuration })
+        })
+        .then(response => { if (!response.ok) success = false; }).catch(() => { success = false; });
+        promises.push(durationPromise);
+    }
 
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ message: 'Falha ao salvar a configuração.' }));
-            throw new Error(errorData.message || 'Falha ao salvar a configuração.');
-        }
+    // Adiciona a promise para salvar o Intervalo, se o campo foi preenchido
+    if (intervalDuration) {
+        // Converte minutos para milissegundos
+        const intervalInMs = parseInt(intervalDuration, 10) * 60 * 1000;
 
-        const result = await response.json();
-        showConfigMessage(result.message || "Tempo de exibição padrão salvo com sucesso!");
-    } catch (error) {
-        console.error("Erro ao salvar configuração:", error);
-        showConfigMessage(error.message, true);
+        const intervalPromise = fetch(`${API_BASE_URL}/config/interval`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ value: intervalInMs.toString() })
+        })
+        .then(response => { if (!response.ok) success = false; }).catch(() => { success = false; });
+        promises.push(intervalPromise);
+    }
+
+    // Espera todas as operações terminarem
+    await Promise.all(promises);
+
+    // Mostra a mensagem final de sucesso ou erro
+    if (success) {
+        showConfigMessage("Configurações salvas com sucesso!");
+    } else {
+        showConfigMessage("Ocorreu um erro ao salvar uma ou mais configurações. Tente novamente.", true);
     }
 });
 
@@ -459,7 +503,6 @@ configForm.addEventListener('submit', async (e) => {
  */
 async function loadGlobalDuration() {
     try {
-        // CORREÇÃO: Voltando a usar o endpoint /config/value para carregar a configuração.
         const response = await fetch(`${API_BASE_URL}/config/value`);
         if (response.ok) {
             const config = await response.json();
@@ -470,6 +513,26 @@ async function loadGlobalDuration() {
         // Se a resposta não for ok (ex: 404), simplesmente não preenche o campo.
     } catch (error) {
         console.error("Erro ao carregar a configuração de duração global:", error);
+    }
+}
+
+/**
+ * NOVO: Carrega a configuração de intervalo da API.
+ */
+async function loadIntervalDuration() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/config/interval`);
+        if (response.ok) {
+            const config = await response.json();
+            if (config && config.value) {
+                // Converte de milissegundos para minutos para exibir no input
+                const intervalInMinutes = parseInt(config.value, 10) / 60000;
+                intervalDurationInput.value = intervalInMinutes;
+            }
+        }
+        // Se a resposta não for ok, simplesmente não preenche o campo.
+    } catch (error) {
+        console.error("Erro ao carregar a configuração de intervalo:", error);
     }
 }
 
@@ -531,6 +594,7 @@ async function loadInitialMedia() {
         }
         const mediaItems = await response.json(); // RF003
         renderMediaList(mediaItems);
+        updateVideoDurations(); // NOVO: Chama a função para atualizar as durações dos vídeos
         if (mediaItems.length > 0) {
             initSortable();
         }
@@ -543,4 +607,5 @@ async function loadInitialMedia() {
 // Carrega os dados iniciais quando a página é carregada.
 loadInitialMedia();
 loadGlobalDuration(); // NOVO
+loadIntervalDuration(); // NOVO
 updateStorageInfo();

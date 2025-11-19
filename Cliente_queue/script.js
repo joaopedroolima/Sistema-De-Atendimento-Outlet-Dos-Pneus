@@ -43,8 +43,8 @@ const SCROLL_WAIT_AT_TOP = 20 * 1000; // NOVO: Tempo de espera da rolagem no top
 const API_BASE_URL = 'https://marketing-api.lucasscosilva.workers.dev'; // URL da API de Marketing
 let adCycleTimeout = null; 
 let globalImageDuration = 10; // Duração padrão em segundos para imagens, caso a API falhe.
+let queueDisplayInterval = 2 * 60 * 1000; // Padrão: 2 minutos de exibição da fila entre anúncios. Será atualizado pela API.
 let currentAdIndex = 0;
-const QUEUE_DISPLAY_INTERVAL = 2 * 1000; // 2 minutos de exibição da fila entre anúncios.
 const readyAlert = document.getElementById('ready-alert');
 
 
@@ -83,6 +83,7 @@ function initializeSystem() {
     setupRealtimeListeners();
     fetchAds(); // Busca os anúncios da API
     fetchGlobalConfig(); // Busca a configuração de duração padrão
+    fetchIntervalConfig(); // NOVO: Busca a configuração de intervalo
     startAdCycle(); // Inicia o ciclo de exibição de anúncios
 }
 
@@ -342,6 +343,26 @@ async function fetchGlobalConfig() {
 }
 
 /**
+ * NOVO: Busca a configuração de intervalo de exibição da fila da API.
+ */
+async function fetchIntervalConfig() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/config/interval`);
+        if (response.ok) {
+            const config = await response.json();
+            // O valor da API vem em milissegundos
+            if (config && config.value && !isNaN(parseInt(config.value, 10))) {
+                queueDisplayInterval = parseInt(config.value, 10);
+                console.log(`Intervalo de exibição da fila definido pela API: ${queueDisplayInterval / 60000} minuto(s)`);
+            }
+        }
+    } catch (error) {
+        console.error("Erro ao buscar configuração de intervalo. Usando padrão:", error);
+    }
+}
+
+
+/**
  * Busca a lista de anúncios ativos da API de marketing.
  */
 async function fetchAds() {
@@ -373,8 +394,8 @@ function startAdCycle() {
         clearTimeout(adCycleTimeout);
     }
     // ATUALIZADO: Agenda a exibição do próximo anúncio para depois do intervalo definido.
-    adCycleTimeout = setTimeout(showNextAd, QUEUE_DISPLAY_INTERVAL);
-    console.log(`Fila de clientes em exibição. Próximo anúncio em ${QUEUE_DISPLAY_INTERVAL / 1000 / 60} minuto(s).`);
+    adCycleTimeout = setTimeout(showNextAd, queueDisplayInterval);
+    console.log(`Fila de clientes em exibição. Próximo anúncio em ${queueDisplayInterval / 60000} minuto(s).`);
 }
 
 /**

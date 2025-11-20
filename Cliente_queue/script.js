@@ -561,7 +561,7 @@ function showNextAd() {
             video.muted = false;
             video.playsInline = true;
             adElement = video;
-            
+
             video.onended = hideAdAndResume;
             adContainer.appendChild(adElement);
             video.play().catch(error => console.error("❌ Falha ao reproduzir vídeo:", error));

@@ -322,34 +322,83 @@ function renderDisplay() {
 /**
  * Renderiza a lista de serviços em andamento
  */
+/**
+ * Aplica um fator de escala dinâmico aos cards para que caibam em 3 linhas.
+ * O Flexbox gerencia a quebra e a rolagem horizontal, o JS apenas escala o tamanho.
+ * @param {number} totalItems O número total de cards a serem exibidos.
+ * @param {HTMLElement} cardsContainer O container dos cards.
+ */
+function adjustServiceCardScaling(totalItems, cardsContainer) {
+    const fixedRows = 3; 
+    const maxColumnsVisible = 3; 
+    const maxItemsVisible = fixedRows * maxColumnsVisible; // 9
+
+    let scaleFactor = 1;
+    
+    // Se mais de 9 itens, o redimensionamento é acionado
+    if (totalItems > maxItemsVisible) {
+        // Quantas colunas são realmente necessárias
+        const requiredColumns = Math.ceil(totalItems / fixedRows);
+        
+        // Fator de escala: o quanto o espaço de 3 colunas precisa ser comprimido 
+        // para caber nas "requiredColumns".
+        scaleFactor = (maxColumnsVisible / requiredColumns); 
+    }
+    
+    scaleFactor = Math.min(1, scaleFactor); // Nunca aumentar
+    
+    // ATUALIZADO: Removemos a manipulação de grid-template-columns e margens.
+    // O Flexbox (com height fixo) gerencia a disposição.
+    document.querySelectorAll('.service-card-wrapper').forEach(wrapper => {
+        wrapper.style.transform = `scale(${scaleFactor})`;
+        
+        // Remove todos os ajustes de margem/width do Grid anterior
+        wrapper.style.width = '350px'; // Volta para o tamanho fixo para o Flexbox
+        wrapper.style.height = '140px'; // Volta para o tamanho fixo para o Flexbox
+        wrapper.style.margin = '0';
+    });
+    
+    // Não precisamos manipular cardsContainer.style aqui, pois o Flexbox é estático.
+
+    console.log(`✨ Redimensionamento (Flexbox): ${totalItems} cards. Escala: ${scaleFactor.toFixed(2)}.`);
+}
+
+/**
+ * Renderiza a lista de serviços em andamento - CORRIGIDO
+ */
 function renderServiceList(items) {
     const cardsContainer = document.getElementById('ongoing-services-cards');
+    
+    // 1. Aplica o redimensionamento antes de renderizar
+    adjustServiceCardScaling(items.length, cardsContainer); 
+    
     if (items.length === 0) {
         cardsContainer.innerHTML = `<p style="text-align: center; padding: 2rem; width: 100%;">Nenhum veículo em atendimento.</p>`;
         return;
     }
+    
+    // 2. Renderiza os cards
     cardsContainer.innerHTML = items.map((item) => {
         const progressHtml = Object.entries(item.services).map(([key, service]) => {
             const statusClass = service.completed ? `completed ${key}` : '';
-            const checkmark = service.completed ? '&#10003;' : ''; // Símbolo de "check"
-            
-            let statusTextClass = statusClass; // Começa com a classe base
-            // Lógica para definir o texto de status
+            const checkmark = service.completed ? '&#10003;' : '';
+
+            let statusTextClass = statusClass;
             let statusText = '';
             if (key === 'alignment') {
                 if (service.completed) {
                     statusText = 'Concluído';
                 } else if (service.status === STATUS_ATTENDING) {
                     statusText = 'Em Atendimento';
-                    statusTextClass = 'in-progress'; // Adiciona classe para amarelo
-                } else { // Se não está concluído nem em atendimento, está na fila
+                    statusTextClass = 'in-progress';
+                } else {
                     statusText = `${item.alignmentPosition}º na Fila`;
-                    statusTextClass = 'in-queue'; // Adiciona classe para vermelho
+                    statusTextClass = 'in-queue';
                 }
             } else {
                 statusText = service.completed ? 'Concluído' : 'Em Atendimento';
                 if (!service.completed) {
-                    statusTextClass = 'in-progress'; // Adiciona classe para amarelo
+                    statusTextClass = 'in-progress';
                 }
             }
             
@@ -365,19 +414,26 @@ function renderServiceList(items) {
         }).join('');
 
         return `
-            <div class="service-card">
-                <div class="car-info">
-                    <div class="car-model">${item.model || 'Veículo'}</div>
-                    <div class="car-plate">${item.plate}</div>
-                </div>
-                
-                <div class="service-progress">
-                    ${progressHtml}
+            <div class="service-card-wrapper">
+                <div class="service-card">
+                    <div class="car-info">
+                        <div class="car-model">${item.model || 'Veículo'}</div>
+                        <div class="car-plate">${item.plate}</div>
+                    </div>
+                    
+                    <div class="service-progress">
+                        ${progressHtml}
+                    </div>
                 </div>
             </div>
         `;
     }).join('');
+
+    // 3. Reajusta a escala após a renderização (garantir estilos em todos os elementos)
+    adjustServiceCardScaling(items.length, cardsContainer);
 }
+
+// ... (Restante do script.js inalterado) ...
 
 /**
  * Renderiza a lista de serviços concluídos

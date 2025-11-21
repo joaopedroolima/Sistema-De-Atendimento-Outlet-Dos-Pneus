@@ -156,29 +156,72 @@ body {
     color: var(--primary-yellow);
 }
 /* --- LAYOUT DE CARDS (RF004, RF005, RF010) --- */
+
+/* --- LAYOUT DE CARDS (OTIMIZADO PARA 3 LINHAS E ATÉ 3 COLUNAS) --- */
+/* --- LAYOUT DE CARDS (RF004, RF005, RF010) - NOVO FLEXBOX COMPACTO --- */
 .cards-container {
     display: flex;
-    flex-flow: column wrap; /* Organiza em colunas e quebra para a próxima */
-    gap: 1rem;
-    /* A altura máxima fixa foi removida para permitir que o contêiner cresça. */
-    flex-grow: 1; /* Faz o contêiner ocupar o espaço vertical disponível. */
-    overflow-y: hidden; /* Esconde a rolagem vertical */
-    overflow-x: auto; /* Permite rolagem horizontal se muitas colunas forem criadas */
-    align-content: flex-start; /* Alinha as colunas no início */
+    /* Faz os itens preencherem 3 linhas de cima para baixo e quebrar para a próxima coluna */
+    flex-flow: column wrap; 
+    
+    /* Espaçamento compacto de 0.8rem entre itens */
+    gap: 0.8rem; 
+    
+    flex-grow: 1; 
+    
+    /* ESSENCIAL: Altura máxima para forçar a quebra de linha. 
+       A altura total será a soma da altura dos 3 cards + 2 gaps entre eles. 
+       (140px * 3) + (0.8rem * 2) = 420px + ~25.6px = ~445.6px. Vamos fixar em 450px. */
+    height: 450px; 
+    
+    /* Permite rolagem horizontal se necessário */
+    overflow-y: hidden; 
+    overflow-x: auto; 
+    align-content: flex-start; 
+    
+    /* Removemos o padding do container, usaremos o gap do Flexbox */
+    padding: 0; 
+
+    /* Oculta a barra de rolagem visualmente */
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+/* Oculta a barra de rolagem no WebKit */
+.cards-container::-webkit-scrollbar {
+    display: none;
+}
+
+/* Novo container para aplicar a escala e o espaçamento entre itens */
+.service-card-wrapper {
+    transform-origin: top left;
+    transition: transform 0.3s ease; 
+    
+    /* Define o tamanho base de cada item na coluna, forçando a altura da linha */
+    width: 350px; /* Largura base do card */
+    height: 140px; /* Altura base do card (um terço da altura do container) */
+    
+    /* Removemos o padding do wrapper e voltamos ao padding interno do card */
+    padding: 0; 
+    
+    /* Define o tamanho máximo para que a quebra de linha funcione */
+    flex-basis: 180px; 
 }
 
 /* Card de Serviço em Andamento */
 .service-card {
     background-color: var(--background-color);
-    border: 1px solid var(--primary-yellow); /* Linha amarela ao redor do card, conforme solicitado */
+    border: 1px solid var(--primary-yellow);
     border-radius: 6px;
-    padding: 1.2rem; /* Padding aumentado */
-    width: 320px; /* Largura aumentada para comportar os status */
-    min-height: 110px; /* Altura mínima para garantir espaço */
-    height: auto; /* Altura automática para se ajustar ao conteúdo */
+    padding: 1.2rem;
+    
+    /* Deve ocupar 100% do seu wrapper de 350x140 */
+    width: 100%; 
+    height: 100%; 
+    min-height: 140px; 
     display: flex;
-    justify-content: space-between; /* Espaça a info do carro e o progresso */
-    align-items: center; /* Centraliza o conteúdo verticalmente */
+    justify-content: space-between; 
+    align-items: center; 
 }
 
 .car-info {
@@ -212,7 +255,7 @@ body {
 .service-progress {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem; /* Espaço entre cada item de serviço */
+    gap: 0.1rem; /* Espaço mínimo entre cada item de serviço */
     align-self: center; /* Alinha ao centro do card */
 }
  
@@ -220,7 +263,7 @@ body {
     display: flex;
     flex-direction: column; /* Organiza o conteúdo verticalmente */
     border-bottom: 1px solid var(--border-color); /* Linha separadora */
-    padding-bottom: 0.5rem;
+    padding-bottom: 0.6rem;
 }
 
 .progress-item:last-child {

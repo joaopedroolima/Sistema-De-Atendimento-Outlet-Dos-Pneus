@@ -22,6 +22,8 @@
 body {
     font-family: 'Inter', sans-serif;
     background-color: #f0f2f5; /* Fundo alterado para cinza claro (quase branco) */
+    /* Gradiente suave com azul e amarelo foscos, conforme solicitado */
+    background: linear-gradient(135deg, #3584eb 0%, #f9da60 70%);
     color: var(--dark-text);
     overflow-x: hidden;
 }
@@ -38,22 +40,36 @@ body {
     justify-content: space-between;
     align-items: center;
     padding: 1rem 2rem;
-    background-color: #FFF;
+    background-color: #ffffff; /* Fundo branco, conforme solicitado */
     border-bottom: 1px solid var(--border-color);
+    border-radius: 20px; /* Bordas arredondadas em todos os cantos */
 }
 
-.logo span:first-child {
+/* Novo contêiner para agrupar logo e título */
+.logo-container {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem; /* Espaço entre o logo e o título */
+}
+
+.logo-container img {
+    height: 50px; /* Altura do logo */
+    width: auto; /* Largura automática para manter a proporção */
+    border-radius: 8px; /* Bordas arredondadas para a imagem */
+}
+
+/* Estilo para o título no cabeçalho */
+.header-title {
+    font-size: 1.8rem;
     font-weight: 700;
-    font-size: 2.2rem; /* Fonte aumentada para maior destaque */
-    color: var(--primary-yellow); /* Cor da loja */
+    color: var(--in-progress-blue); /* Cor azul para a primeira parte da frase */
+    text-transform: uppercase;
 }
 
-.logo span:last-child {
-    font-weight: 500;
-    font-size: 2.2rem; /* Fonte aumentada para maior destaque */
-    color: var(--in-progress-blue); /* Cor da loja */
+/* CORREÇÃO: Seletor mais específico para garantir que a cor amarela seja aplicada. */
+.header-title .outlet-text {
+    color: rgb(255, 241, 42); /* Cor amarela para a palavra "OUTLET" */
 }
-
 .datetime {
     font-size: 1.2rem;
     font-weight: 500;
@@ -114,11 +130,17 @@ body {
 .ongoing-services .section-header,
 .completed-services .section-header {
     background-color: var(--primary-yellow); /* Fundo amarelo da loja */
-    color: var(--dark-text); /* Garante bom contraste */
+    color: #FFF; /* Texto branco, conforme solicitado */
     border-radius: 6px 6px 0 0;
     padding: 1rem;
     margin: -1.5rem -1.5rem 1rem -1.5rem; /* Ajusta para preencher o topo do card */
     border-bottom: none;
+}
+
+/* Altera a cor do cabeçalho de "Serviços em Andamento" para azul, conforme solicitado */
+.ongoing-services .section-header {
+    background-color: var(--in-progress-blue);
+    color: #FFF; /* Texto branco para melhor contraste com o fundo azul */
 }
 /* --- LAYOUT DE CARDS (RF004, RF005, RF010) --- */
 .cards-container {

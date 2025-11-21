@@ -221,6 +221,13 @@ body {
 .status-circle.completed {
     background-color: var(--border-color); /* Cor padrão caso a específica não aplique */
     border-color: transparent;
+    color: white; /* Cor do checkmark */
+    font-weight: 900; /* Deixa o símbolo bem mais grosso */
+    font-size: 1.1rem; /* Ajusta o tamanho do símbolo */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1; /* Melhora o alinhamento vertical */
 }
 
 /* Cards de Serviços Concluídos (RF001) */

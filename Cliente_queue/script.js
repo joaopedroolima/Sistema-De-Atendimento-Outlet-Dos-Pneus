@@ -109,7 +109,6 @@ function setupRealtimeListeners() {
     const hiddenItemsQuery = query(collection(db, HIDDEN_ITEMS_COLLECTION_PATH));
     onSnapshot(hiddenItemsQuery, (snapshot) => {
         hiddenItemIds = new Set(snapshot.docs.map(doc => doc.id));
-        console.log(`👁️ Itens ocultos atualizados: ${hiddenItemIds.size} item(s)`);
         // Força uma nova renderização para aplicar o filtro
         renderDisplay();
     });
@@ -133,10 +132,6 @@ function setupRealtimeListeners() {
                        status === 'Serviço Geral Concluído';
             });
         
-        console.log("📋 Serviços carregados:", serviceJobs.length);
-        serviceJobs.forEach(job => {
-            console.log(`  - ${job.licensePlate}: ${job.status} | GS: ${job.statusGS} | TS: ${job.statusTS}`);
-        });
         renderDisplay();
     }, (error) => {
         console.error("❌ Erro ao ouvir serviços:", error);
@@ -163,10 +158,6 @@ function setupRealtimeListeners() {
                        status === 'Finalizado';
             });
         
-        console.log("🔧 Fila de alinhamento carregada:", alignmentQueue.length);
-        alignmentQueue.forEach(car => {
-            console.log(`  - ${car.licensePlate}: ${car.status}`);
-        });
         renderDisplay();
     }, (error) => {
         console.error("❌ Erro ao ouvir fila de alinhamento:", error);
@@ -192,31 +183,29 @@ function setupRealtimeListeners() {
  * CORRIGIDO: Orquestra a renderização da tela
  */
 function renderDisplay() {
-    console.log("🎨 === INICIANDO RENDERIZAÇÃO ===");
     let vehicleData = new Map();
     const readyItems = [];
 
     const getVehicle = (plate) => {
         if (!vehicleData.has(plate)) {
-            vehicleData.set(plate, { plate, model: 'Veículo', services: {}, priority: 99 });
+            vehicleData.set(plate, { id: null, plate, model: 'Veículo', services: {}, priority: 99, status: null });
         }
         return vehicleData.get(plate);
     };
 
     // 1. CORRIGIDO: Processa SERVIÇOS GERAIS
-    console.log("📦 Processando serviços gerais...");
     serviceJobs.forEach(job => {
-        console.log(`  🔍 Analisando ${job.licensePlate} (${job.status})`);
-        
         if (job.status === STATUS_READY) {
-            console.log(`    ✅ Adicionado aos prontos`);
-            readyItems.push({ plate: job.licensePlate, model: job.carModel || 'Veículo' });
+            // Adiciona o ID da serviceJob para referência na hora de ocultar
+            readyItems.push({ plate: job.licensePlate, model: job.carModel || 'Veículo', id: job.id });
             return;
         }
 
         // CORRIGIDO: Processar serviços que não estejam finalizados/pagos
         if (job.status !== 'Finalizado' && job.status !== 'Pago') {
             const vehicle = getVehicle(job.licensePlate);
+            vehicle.status = job.status; // ATUALIZADO: Armazena o status geral do job
+            vehicle.id = job.id; // Armazena o ID da serviceJob, crucial para ocultar
             vehicle.model = job.carModel || vehicle.model;
             
             if (5 < vehicle.priority) vehicle.priority = 5;
@@ -233,7 +222,6 @@ function renderDisplay() {
                     name: 'Mecânico', 
                     completed: isCompleted
                 };
-                console.log(`    🔧 Mecânico: ${isCompleted ? '✅ Concluído' : '⏳ Em andamento'}`);
             }
 
             // Verifica se tem Serviço de Pneus (Borracheiro)
@@ -244,37 +232,38 @@ function renderDisplay() {
                     name: 'Borracheiro', 
                     completed: isCompleted
                 };
-                console.log(`    🛞 Borracheiro: ${isCompleted ? '✅ Concluído' : '⏳ Em andamento'}`);
             }
         }
     });
 
     // 2. CORRIGIDO: Processa ALINHAMENTO
-    console.log("🎯 Processando alinhamento...");
     alignmentQueue.forEach(car => {
-        console.log(`  🔍 Analisando ${car.licensePlate} (${car.status})`);
+        // Se o carro no alinhamento está 'Pronto para Pagamento', ele não deve estar na fila principal.
+        // CORREÇÃO: Ele deve ser adicionado à lista de prontos e o processamento para este carro deve parar.
+        if (car.status === STATUS_READY) {
+            if (!readyItems.some(item => item.plate === car.licensePlate)) {
+                readyItems.push({ plate: car.licensePlate, model: car.carModel || 'Veículo', id: car.id });
+            }
+            return; // Pula para o próximo carro, pois este já está pronto.
+        }
         
         const vehicle = getVehicle(car.licensePlate);
         vehicle.model = car.carModel || vehicle.model;
+        
+        if (!vehicle.id) {
+            vehicle.id = car.id;
+        }
 
         // CORRIGIDO: Considerar 'Finalizado' como concluído
         const isAlignmentCompleted = car.status === STATUS_READY || 
                                     car.status === STATUS_ALIGNMENT_FINISHED ||
+                                    car.status === 'Pronto para Pagamento' ||
                                     car.status === 'Finalizado';
 
         vehicle.services.alignment = { 
             name: 'Alinhamento', 
             completed: isAlignmentCompleted 
         };
-        
-        console.log(`    📐 Alinhamento: ${isAlignmentCompleted ? '✅ Concluído' : '⏳ Em andamento'}`);
-
-        // CORRIGIDO: Adiciona à lista de prontos APENAS se o status for exatamente 'Pronto para Pagamento'.
-        if (car.status === STATUS_READY) {
-            if (!readyItems.some(item => item.plate === car.licensePlate)) {
-                readyItems.push({ plate: car.licensePlate, model: car.carModel || 'Veículo' });
-            }
-        }
         
         let priority = car.status === STATUS_ATTENDING ? 1 : (car.status === STATUS_WAITING ? 2 : 3);
         if (priority < vehicle.priority) vehicle.priority = priority;
@@ -285,30 +274,25 @@ function renderDisplay() {
     const displayItems = Array.from(vehicleData.values()).filter(vehicle => {
         const serviceStatuses = Object.values(vehicle.services);
         const hasIncomplete = serviceStatuses.length > 0 && serviceStatuses.some(service => !service.completed);
-        
-        if (hasIncomplete) {
-            console.log(`✅ Exibindo ${vehicle.plate}: ${Object.keys(vehicle.services).length} serviços`);
-        }
-        
         return hasIncomplete;
     });
 
     // NOVO: Filtra os itens que estão na lista de ocultos
-    const finalDisplayItems = displayItems.filter(item => {
+    let displayItemsFiltered = displayItems.filter(item => {
+        // CORREÇÃO: A verificação deve ser feita pelo ID do serviço, não pela placa.
         const isHidden = hiddenItemIds.has(item.id);
-        if (isHidden) console.log(`👁️ Ocultando item: ${item.plate} (ID: ${item.id})`);
         return !isHidden;
     });
 
-    // Ordena
-    displayItems.sort((a, b) => a.priority - b.priority);
+    // Ordena a lista JÁ FILTRADA
+    displayItemsFiltered.sort((a, b) => a.priority - b.priority);
 
-    console.log(`📊 Resultado: ${displayItems.length} em andamento, ${readyItems.length} prontos`);
-    console.log("🎨 === FIM DA RENDERIZAÇÃO ===\n");
+    // CORREÇÃO: Filtra os itens prontos pelo ID do serviço também.
+    const finalReadyItems = readyItems.filter(item => !hiddenItemIds.has(item.id));
 
     // Renderiza
-    renderServiceList(finalDisplayItems); // Usa a lista final filtrada
-    renderReadyList(readyItems.filter(item => !hiddenItemIds.has(item.id))); // Filtra também os prontos
+    renderServiceList(displayItemsFiltered);
+    renderReadyList(finalReadyItems);
 }
 
 /**
@@ -323,10 +307,11 @@ function renderServiceList(items) {
     cardsContainer.innerHTML = items.map((item) => {
         const progressHtml = Object.entries(item.services).map(([key, service]) => {
             const statusClass = service.completed ? `completed ${key}` : '';
+            const checkmark = service.completed ? '&#10003;' : ''; // Símbolo de "check"
             return `
                 <div class="progress-item">
                     <span class="service-name">${service.name}</span>
-                    <div class="status-circle ${statusClass}"></div>
+                    <div class="status-circle ${statusClass}">${checkmark}</div>
                 </div>
             `;
         }).join('');

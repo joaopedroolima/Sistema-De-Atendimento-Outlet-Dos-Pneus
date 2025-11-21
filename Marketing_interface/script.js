@@ -544,40 +544,59 @@ function listenToHiddenItems() {
 
 function listenToServiceQueues() {
     // Listener para Serviços Gerais (serviceJobs)
+    // Listener para Serviços Gerais (serviceJobs) - AGORA IDÊNTICO AO CLIENTE
     const serviceQuery = query(collection(db, SERVICE_COLLECTION_PATH));
     onSnapshot(serviceQuery, (serviceSnapshot) => {
-        const allServiceJobs = serviceSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const serviceJobs = serviceSnapshot.docs
+            .map(doc => ({ id: doc.id, ...doc.data() }))
+            .filter(job => {
+                const status = job.status;
+                return status === 'Pendente' || 
+                       status === 'Pronto para Pagamento' || 
+                       status === 'Serviço Geral Concluído' || 
+                       status === 'Em Andamento';
+            });
 
         // Listener para Alinhamento (alignmentQueue)
+        // Listener para Alinhamento (alignmentQueue) - AGORA IDÊNTICO AO CLIENTE
         const alignmentQuery = query(collection(db, ALIGNMENT_COLLECTION_PATH));
         onSnapshot(alignmentQuery, (alignmentSnapshot) => {
-            const allAlignmentJobs = alignmentSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            const alignmentQueue = alignmentSnapshot.docs
+                .map(doc => ({ id: doc.id, ...doc.data() }))
+                .filter(car => {
+                    const status = car.status;
+                    return status === 'Aguardando' || 
+                           status === 'Em Atendimento' || 
+                           status === 'Aguardando Serviço Geral' || 
+                           status === 'Pronto para Pagamento' ||
+                           status === 'Finalizado';
+                });
 
-            // REPLICA A LÓGICA DE PROCESSAMENTO DO `cliente_queue`
+            // REPLICA A LÓGICA EXATA DO script-cliente.js
             const vehicleData = new Map();
             const getVehicle = (plate) => {
                 if (!vehicleData.has(plate)) {
-                    // Inicializa com um ID temporário ou nulo
+                    // A lógica de renderização da fila espelho é diferente,
+                    // então mantemos a estrutura de dados dela.
                     vehicleData.set(plate, { id: null, plate, model: 'Veículo', services: {}, status: 'Pendente' });
                 }
                 return vehicleData.get(plate);
             };
 
-            // Processa serviceJobs
-            allServiceJobs.forEach(job => {
-                // CORREÇÃO CRÍTICA 1: Ignora jobs finalizadas/prontas, replicando a lógica do cliente.
-                if (job.status === 'Finalizado' || job.status === 'Pago' || job.status === 'Pronto para Pagamento') {
-                     return; 
+            // Processa serviceJobs (já filtrados)
+            serviceJobs.forEach(job => {
+                if (job.status === 'Finalizado' || job.status === 'Pago') {
+                    return;
                 }
 
                 const vehicle = getVehicle(job.licensePlate);
-                // CORREÇÃO CRÍTICA 2: Define o ID da job principal (ServiceJob) para ocultar/mostrar.
-                vehicle.id = job.id; 
+                vehicle.id = job.id; // ID da ServiceJob
                 vehicle.model = job.carModel || vehicle.model;
                 vehicle.status = job.status;
 
-                // CORREÇÃO: Replica a lógica de verificação de serviços concluídos do cliente_queue
                 const jobType = job.type || job.serviceType || '';
+                
+                // Serviço Geral (Mecânico)
                 if (jobType.includes('Serviço Geral') || job.statusGS) {
                     const isCompleted = job.statusGS === 'Concluído' || 
                                        job.statusGS === 'Serviço Geral Concluído' ||
@@ -587,6 +606,8 @@ function listenToServiceQueues() {
                         completed: isCompleted
                     };
                 }
+                
+                // Serviço de Pneus (Borracheiro)
                 if (jobType.includes('Pneus') || job.statusTS) {
                     const isCompleted = job.statusTS === 'Concluído' || 
                                        job.statusTS === 'Serviço Pneus Concluído';
@@ -597,23 +618,22 @@ function listenToServiceQueues() {
                 }
             });
 
-            // Processa alignmentQueue
-            allAlignmentJobs.forEach(car => {
-                // CORREÇÃO CRÍTICA 1: Ignora alinhamentos finalizados/prontos, replicando a lógica do cliente.
-                if (car.status === 'Finalizado' || car.status === 'Pronto para Pagamento') {
-                     return;
+            // Processa alignmentQueue (já filtrados)
+            alignmentQueue.forEach(car => {
+                if (car.status === 'Finalizado' && car.status !== 'Pronto para Pagamento') {
+                    return;
                 }
 
                 const vehicle = getVehicle(car.licensePlate);
                 vehicle.model = car.carModel || vehicle.model;
                 vehicle.status = car.status;
 
-                // CORREÇÃO CRÍTICA 2: Se o veículo ainda não tem ID (só está no alinhamento), usa o ID do alinhamento.
+                // Se não tem ID ainda (só está no alinhamento), usa o ID do alinhamento
                 if (!vehicle.id) {
                     vehicle.id = car.id;
                 }
                 
-                // CORREÇÃO: Replica a lógica de conclusão de alinhamento do cliente_queue
+                // Verifica se o alinhamento está completo
                 const isAlignmentCompleted = car.status === 'Pronto para Pagamento' || 
                                             car.status === 'Finalizado';
                 vehicle.services.alignment = { 
@@ -622,17 +642,14 @@ function listenToServiceQueues() {
                 };
             });
 
-            // Filtra apenas os veículos que têm serviços incompletos, exatamente como na tela do cliente
+            // Filtra EXATAMENTE como no cliente: apenas veículos com serviços incompletos
             const displayItems = Array.from(vehicleData.values()).filter(vehicle => {
                 const serviceStatuses = Object.values(vehicle.services);
-                // O veículo deve ter um ID e pelo menos um serviço incompleto para ser exibido.
-                // Se um veículo tem serviços, mas todos estão 'completed: true', ele também não entra.
                 const hasIncomplete = serviceStatuses.length > 0 && serviceStatuses.some(service => !service.completed);
-
                 return vehicle.id !== null && hasIncomplete;
             });
 
-            // Ordena por placa para consistência
+            // Ordena por placa
             displayItems.sort((a, b) => a.plate.localeCompare(b.plate));
 
             renderQueueMirror(displayItems);

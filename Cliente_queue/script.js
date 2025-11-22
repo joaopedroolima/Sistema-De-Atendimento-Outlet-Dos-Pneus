@@ -38,8 +38,8 @@ let serviceJobs = [];
 let alignmentQueue = [];
 let ads = [];
 let hiddenItemIds = new Set();
-const PROMOTIONS_SCROLL_WAIT = 15 * 1000; // Tempo de espera para o scroll de promoções
-const ONGOING_SERVICES_SCROLL_WAIT = 25 * 1000; // Tempo de espera para o scroll de serviços em andamento
+const PROMOTIONS_SCROLL_WAIT = 3 * 1000; // Tempo de espera para o scroll de promoções (ajustado para 3s)
+const ONGOING_SERVICES_SCROLL_WAIT = 10000; // CORREÇÃO: Intervalo de 10 segundos entre os scrolls
 
 const API_BASE_URL = 'https://marketing-api.lucasscosilva.workers.dev';
 let adCycleTimeout = null;
@@ -302,14 +302,17 @@ const ScrollManager = {
         const startCycle = () => {
             if (instance.timeoutId) clearTimeout(instance.timeoutId);
             const scrollLength = isHorizontal ? 
-                element.scrollWidth - element.clientWidth : 
+                element.scrollWidth - element.clientWidth :
                 element.scrollHeight - element.clientHeight;
+
+            // CORREÇÃO: A verificação de pausa global (para anúncios) e de conteúdo (scrollLength)
+            // agora afeta apenas a instância atual, garantindo que as áreas de scroll sejam independentes.
             if (this.isPaused || scrollLength <= 2) {
                 instance.isScrolling = false;
                 return;
             }
             instance.isScrolling = true;
-
+            
             // Usa a constante de tempo correta baseada no ID do elemento
             const waitTime = element.id === 'ongoing-services-cards' ? ONGOING_SERVICES_SCROLL_WAIT : PROMOTIONS_SCROLL_WAIT;
 
@@ -317,7 +320,7 @@ const ScrollManager = {
         };
         const scrollForward = () => {
             if (this.isPaused) return;
-            const duration = isHorizontal ? 8000 : (element.id === 'promotions-list' ? 4000 : 6000); 
+            const duration = isHorizontal ? 20000 : (element.id === 'promotions-list' ? 2000 : 6000); // CORREÇÃO: Scroll de promoções mais rápido (2 segundos)
             const target = isHorizontal ? element.scrollWidth - element.clientWidth : element.scrollHeight - element.clientHeight;
             this.smoothScroll(element, target, duration, scrollBackward, isHorizontal);
         };
@@ -456,9 +459,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (isFirstRender) {
             const ongoing = document.getElementById('ongoing-services-cards');
             if (ongoing) {
-                // Adiciona a classe para que o ScrollManager saiba que este contêiner rola na horizontal.
-                ongoing.classList.add('horizontal-scroll');
-                ScrollManager.init(ongoing);
+                ScrollManager.init(ongoing); // Revertido para a inicialização padrão
             }
             ScrollManager.init(document.getElementById('promotions-list'));
             const completed = document.getElementById('completed-services-cards');

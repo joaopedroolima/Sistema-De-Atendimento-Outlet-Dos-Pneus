@@ -450,7 +450,11 @@ document.addEventListener('DOMContentLoaded', () => {
         originalRender.apply(this, args);
         if (isFirstRender) {
             const ongoing = document.getElementById('ongoing-services-cards');
-            if (ongoing) ScrollManager.init(ongoing);
+            if (ongoing) {
+                // Adiciona a classe para que o ScrollManager saiba que este contêiner rola na horizontal.
+                ongoing.classList.add('horizontal-scroll');
+                ScrollManager.init(ongoing);
+            }
             ScrollManager.init(document.getElementById('promotions-list'));
             const completed = document.getElementById('completed-services-cards');
             if (completed) ScrollManager.init(completed);

@@ -48,6 +48,7 @@ let mecanicosGeral = [];
 let vendedores = [];
 let currentJobToConfirm = { id: null, confirmAction: null };
 let currentAlignmentJobForRework = null;
+let deferredInstallPrompt = null; // Variável para guardar o evento de instalação
 
 // =========================================================================
 // INICIALIZAÇÃO E AUTENTICAÇÃO
@@ -94,6 +95,7 @@ function postLoginSetup(user) {
     document.getElementById('alignment-form').addEventListener('submit', handleAddAlignment);
     document.getElementById('rework-form').addEventListener('submit', handleReturnToMechanic);
     document.getElementById("confirm-button").addEventListener("click", handleConfirmAction);
+    setupPwaInstallHandlers(); // Adiciona a lógica para o botão de instalação
     setupServiceWorkerListener();
 
     setupRealtimeListeners();
@@ -108,6 +110,41 @@ function handleLogout() {
 // =========================================================================
 // SERVICE WORKER E NOTIFICAÇÕES (CLIENT-SIDE)
 // =========================================================================
+
+/**
+ * Configura os handlers para o botão de instalação do PWA.
+ */
+function setupPwaInstallHandlers() {
+    const installButton = document.getElementById('install-pwa-btn');
+
+    // Se o app já estiver rodando como um PWA instalado, o botão não é necessário.
+    if (window.matchMedia('(display-mode: standalone)').matches) {
+        return;
+    }
+
+    // Ouve pelo evento que o navegador dispara quando o app se torna instalável.
+    window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault(); // Previne o prompt padrão do navegador
+        deferredInstallPrompt = e; // Guarda o evento
+        installButton.classList.remove('hidden'); // Mostra nosso botão
+    });
+
+    // Adiciona o listener de clique para mostrar o prompt de instalação.
+    installButton.addEventListener('click', async () => {
+        if (deferredInstallPrompt) {
+            deferredInstallPrompt.prompt(); // Mostra o prompt de instalação
+            const { outcome } = await deferredInstallPrompt.userChoice;
+            
+            // O prompt só pode ser usado uma vez.
+            deferredInstallPrompt = null;
+            
+            // Esconde o botão após a interação.
+            installButton.classList.add('hidden');
+        }
+    });
+
+    window.addEventListener('appinstalled', () => { deferredInstallPrompt = null; });
+}
 
 function setupServiceWorkerListener() {
     navigator.serviceWorker.addEventListener('message', event => {

@@ -64,10 +64,36 @@ self.addEventListener('push', event => {
   const options = {
     body: data.body || 'Você tem uma nova mensagem.',
     icon: data.icon || 'icons/icon-192x192.png',
+    badge: 'icons/icon-192x192.png', // DICA EXTRA: Ícone monocromático que aparece na barra de status.
+
+    // PASSO NOVO: Adiciona som e vibração para quando o app estiver fechado.
+    sound: 'sounds/notify.mp3', // Caminho para o som que já está no cache.
+    vibrate: [200, 100, 200], // Vibra por 200ms, pausa por 100ms, vibra por 200ms.
+    // SOLUÇÃO: Força a notificação a se comportar como nova, o que ajuda a acionar o som.
+    tag: 'fila-alinhamento-notification', // Agrupa notificações para não lotar a barra de status.
+    renotify: true, // Faz o dispositivo vibrar/tocar som mesmo se a tag for a mesma.
+
     data: {
       url: data.data.url || '/'
     }
   };
 
-  event.waitUntil(self.registration.showNotification(title, options));
+  const notificationPromise = self.registration.showNotification(title, options);
+
+  // PASSO 14 e 15: Envia uma mensagem para a página/cliente ativo para tocar o som.
+  const messagePromise = self.clients.matchAll({
+    type: 'window',
+    includeUncontrolled: true
+  }).then(clients => {
+    if (clients && clients.length) {
+      // Envia a mensagem para todos os clientes abertos.
+      console.log('Service Worker: Enviando mensagem "play-sound" para os clientes.');
+      clients.forEach(client => {
+        client.postMessage({ type: 'play-sound' });
+      });
+    }
+  });
+
+  // Espera tanto a notificação ser mostrada quanto a mensagem ser enviada.
+  event.waitUntil(Promise.all([notificationPromise, messagePromise]));
 });

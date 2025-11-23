@@ -75,11 +75,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         await signInAnonymously(auth);
         console.log("Autenticação anônima com Firebase bem-sucedida.");
         
-        // Apenas continua a configuração após a autenticação bem-sucedida
-        postLoginSetup(user);
-
         // PASSO 7: Tenta registrar o usuário para receber notificações push.
         registerForPushNotifications();
+        
+        postLoginSetup(user);
 
     } catch (error) {
         console.error("Erro na autenticação anônima com Firebase:", error);
@@ -90,31 +89,38 @@ document.addEventListener('DOMContentLoaded', async () => {
 function postLoginSetup(user) {
     currentUserRole = user.role;
     currentUserName = user.username;
-
-    document.getElementById('user-info').textContent = `Usuário: ${user.username} | Cargo: ${user.role.toUpperCase()}`;
-    
-    // Configura a UI com base no cargo
-    const vendedorSelect = document.getElementById('aliVendedorName');
-    if (currentUserRole === ALIGNER_ROLE) {
-        // Alinhador não pode escolher o vendedor, o sistema assume que é ele mesmo.
-        vendedorSelect.innerHTML = `<option value="${currentUserName}">${currentUserName}</option>`;
-        vendedorSelect.value = currentUserName;
-        vendedorSelect.disabled = true;
-    }
-
-    // Configura listeners de eventos
-    setupRealtimeListeners();
-    setupUserListener();
     
     document.getElementById('logout-btn').addEventListener('click', handleLogout);
     document.getElementById('alignment-form').addEventListener('submit', handleAddAlignment);
     document.getElementById('rework-form').addEventListener('submit', handleReturnToMechanic);
     document.getElementById("confirm-button").addEventListener("click", handleConfirmAction);
+    setupServiceWorkerListener();
+
+    setupRealtimeListeners();
+    setupUserListener();
 }
 
 function handleLogout() {
     localStorage.removeItem('currentUser');
     window.location.href = 'auth.html';
+}
+
+// =========================================================================
+// SERVICE WORKER E NOTIFICAÇÕES (CLIENT-SIDE)
+// =========================================================================
+
+function setupServiceWorkerListener() {
+    navigator.serviceWorker.addEventListener('message', event => {
+        console.log('Página: Mensagem recebida do Service Worker:', event.data);
+        if (event.data && event.data.type === 'play-sound') {
+            const notificationSound = new Audio('sounds/notify.mp3');
+            notificationSound.play().catch(error => {
+                // A interação do usuário pode ser necessária para tocar o som
+                console.warn('Não foi possível tocar o som da notificação automaticamente:', error);
+                alertUser('Nova notificação recebida!', 'success');
+            });
+        }
+    });
 }
 
 // =========================================================================
@@ -151,9 +157,10 @@ function setupRealtimeListeners() {
 }
 
 function populateDropdowns() {
-    // Popula dropdown de vendedores (apenas para gerentes)
-    if (currentUserRole === MANAGER_ROLE) {
+    // Popula dropdown de vendedores (para gerentes e alinhadores)
+    if (currentUserRole === MANAGER_ROLE || currentUserRole === ALIGNER_ROLE) {
         const vendedorSelect = document.getElementById('aliVendedorName');
+        vendedorSelect.disabled = false; // Garante que o campo não esteja desabilitado
         vendedorSelect.innerHTML = vendedores.map(v => `<option value="${v.username}">${v.username}</option>`).join('');
     }
     
@@ -205,7 +212,7 @@ function renderAlignmentQueue() {
                 <tr>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">#</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Modelo / Placa</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente (Vendedor)</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vendedor</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                     <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Mover</th>
                     <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
@@ -277,7 +284,7 @@ function renderAlignmentQueue() {
                     <span class="font-semibold">${car.carModel}</span>
                     <span class="text-xs text-gray-500 block">${car.licensePlate}</span>
                 </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">${car.customerName || 'N/A'} (${car.vendedorName || 'N/A'})</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">${car.vendedorName || 'N/A'}</td>
                 <td class="px-6 py-4 whitespace-nowrap">
                     <div class="flex flex-col">
                         <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusColor} self-start">${statusText}</span>

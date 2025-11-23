@@ -45,12 +45,20 @@ let subscriptions = [];
  */
 app.post('/save-subscription', (req, res) => {
     const subscription = req.body;
-    console.log('Recebida nova subscription para salvar:', subscription.endpoint);
+    
+    // Verifica se já existe uma subscription com o mesmo endpoint
+    const exist = subscriptions.find(sub => sub.endpoint === subscription.endpoint);
 
-    // Adiciona a nova subscription ao nosso "banco de dados" em memória
-    subscriptions.push(subscription);
+    if (!exist) {
+        subscriptions.push(subscription);
+        console.log('✅ Nova subscription salva:', subscription.endpoint.slice(0, 20) + '...');
+    } else {
+        console.log('🔄 Subscription já existente. Atualizando/Ignorando duplicata.');
+        // Opcional: Aqui você poderia atualizar os dados se necessário
+    }
 
-    res.status(201).json({ message: 'Subscription salva com sucesso.' });
+    console.log(`Total de inscritos ativos: ${subscriptions.length}`);
+    res.status(201).json({ message: 'Subscription processada com sucesso.' });
 });
 
 // =========================================================================
@@ -59,27 +67,57 @@ app.post('/save-subscription', (req, res) => {
 /**
  * Endpoint para disparar o envio de uma notificação para todos os inscritos.
  */
+// =========================================================================
+// PASSO 11: ENDPOINT PARA ENVIAR NOTIFICAÇÕES (COM LIMPEZA AUTOMÁTICA)
+// =========================================================================
 app.post('/send-notification', (req, res) => {
     const notificationPayload = {
         notification: {
             title: req.body.title || 'Nova Notificação!',
             body: req.body.body || 'Você tem uma nova mensagem.',
-            icon: 'icons/icon-192x192.png', // Ícone que aparecerá na notificação
+            icon: 'icons/icon-192x192.png',
             data: {
-                url: req.body.url || '/' // URL para abrir ao clicar na notificação
+                url: req.body.url || '/'
             }
         }
     };
 
     console.log(`Enviando notificação para ${subscriptions.length} inscritos...`);
 
-    // Envia a notificação para cada subscription salva
-    const promises = subscriptions.map(sub => webpush.sendNotification(sub, JSON.stringify(notificationPayload)));
+    // Cria uma lista de promessas de envio
+    const promises = subscriptions.map(sub => {
+        return webpush.sendNotification(sub, JSON.stringify(notificationPayload))
+            .then(() => ({ success: true })) // Sucesso
+            .catch(err => {
+                // Se o erro for 410 (Gone) ou 404 (Not Found), a inscrição morreu
+                if (err.statusCode === 410 || err.statusCode === 404) {
+                    console.log(`🧹 Removendo inscrição inativa: ${sub.endpoint}`);
+                    return { success: false, deleteEndpoint: sub.endpoint };
+                }
+                // Outros erros (ex: rede), apenas loga mas não deleta
+                console.error("Erro de envio:", err.statusCode);
+                return { success: false };
+            });
+    });
 
+    // Executa tudo e depois limpa a lista
     Promise.all(promises)
-        .then(() => res.status(200).json({ message: 'Notificações enviadas com sucesso.' }))
+        .then(results => {
+            // Filtra o array original removendo os que foram marcados para deletar
+            const deletedEndpoints = results
+                .filter(r => r.deleteEndpoint)
+                .map(r => r.deleteEndpoint);
+
+            if (deletedEndpoints.length > 0) {
+                subscriptions = subscriptions.filter(sub => !deletedEndpoints.includes(sub.endpoint));
+                console.log(`Total de ${deletedEndpoints.length} inscrições fantasmas removidas.`);
+                console.log(`Restam ${subscriptions.length} inscritos ativos.`);
+            }
+
+            res.status(200).json({ message: 'Processo de envio concluído.' });
+        })
         .catch(err => {
-            console.error("Erro ao enviar notificações:", err);
+            console.error("Erro geral no envio:", err);
             res.sendStatus(500);
         });
 });

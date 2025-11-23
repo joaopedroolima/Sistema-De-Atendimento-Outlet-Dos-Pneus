@@ -41,7 +41,7 @@ export async function registerForPushNotifications() {
     console.log('🎉 SUCESSO! Subscription:', subscription);
 
     // 4. Envia para o backend
-    await fetch('https://boilerless-yang-previgilantly.ngrok-free.dev/save-subscription', {
+    await fetch('https://detect-interaction-tax-cartridges.trycloudflare.com/save-subscription', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(subscription)

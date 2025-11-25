@@ -33,13 +33,11 @@ export async function registerForPushNotifications(role, username) {
     const registration = await navigator.serviceWorker.ready;
     console.log('✅ Service Worker detectado e pronto:', registration.scope);
 
-    // 2. Pede permissão (Isso vai funcionar porque foi chamado pelo clique no script.js)
+    // 2. Pede permissão
     const permission = await Notification.requestPermission();
     
     if (permission !== 'granted') {
       console.warn('Permissão negada pelo usuário.');
-      // Se o usuário negou, não mostramos alerta para não ser chato, 
-      // mas no console aparecerá o aviso.
       return;
     }
 
@@ -50,7 +48,6 @@ export async function registerForPushNotifications(role, username) {
     });
 
     if (currentToken) {
-      console.log('Token gerado:', currentToken);
       await saveTokenToFirestore(currentToken, role, username);
     } else {
       alert('Erro: O Firebase não retornou nenhum token. Verifique a VAPID Key.');
@@ -76,7 +73,7 @@ async function saveTokenToFirestore(token, role, username) {
     }, { merge: true });
 
     console.log(`✅ Token salvo no banco para ${username}!`);
-    // alert(`Notificações ativas para ${username}!`); // Descomente se quiser ver a confirmação na tela
+    // alert(`Notificações ativas para ${username}!`); 
   } catch (e) {
     console.error('❌ Erro ao salvar no Firestore:', e);
     alert(`Erro ao salvar no banco: ${e.message}`);

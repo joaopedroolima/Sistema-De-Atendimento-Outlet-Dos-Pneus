@@ -17,11 +17,11 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const messaging = getMessaging(app);
 
-// SUA CHAVE VAPID (Confira se não há espaços extras no final)
+// SUA CHAVE VAPID
 const VAPID_PUBLIC_KEY = 'BI4ETZDqademtj-ZFFq5f93hUKtLAuJGYt0DsfF12wg09DkmYVz5xwlg2gmC0qBGrtQBuUtcBBysIWaZIQjnur0'; 
 
 export async function registerForPushNotifications(role, username) {
-  console.log(`🔧 [${username}] Iniciando processo de Push...`);
+  console.log(`🔧 [${username}] Iniciando processo de Push (${role})...`);
 
   if (!('serviceWorker' in navigator)) {
       alert('Erro: Este navegador não suporta Service Workers.');
@@ -29,28 +29,25 @@ export async function registerForPushNotifications(role, username) {
   }
 
   try {
-    // 1. Aguarda o Service Worker estar PRONTO e ATIVO (Crucial para Android)
+    // 1. Aguarda o Service Worker estar PRONTO e ATIVO
     const registration = await navigator.serviceWorker.ready;
     console.log('✅ Service Worker detectado e pronto:', registration.scope);
 
-    // 2. Pede permissão (No Android, isso deve ocorrer após um clique)
+    // 2. Pede permissão
     const permission = await Notification.requestPermission();
     
     if (permission !== 'granted') {
-      alert('Permissão de notificação foi negada ou fechada.');
+      console.warn('Permissão negada pelo usuário.');
       return;
     }
 
     // 3. Tenta obter o Token
-    // alert('Gerando token... aguarde.'); // (Opcional: descomente se quiser ver esse passo)
-
     const currentToken = await getToken(messaging, {
       vapidKey: VAPID_PUBLIC_KEY,
       serviceWorkerRegistration: registration
     });
 
     if (currentToken) {
-      console.log('Token gerado:', currentToken);
       await saveTokenToFirestore(currentToken, role, username);
     } else {
       alert('Erro: O Firebase não retornou nenhum token. Verifique a VAPID Key.');
@@ -58,7 +55,6 @@ export async function registerForPushNotifications(role, username) {
 
   } catch (err) {
     console.error('❌ Erro fatal no Push:', err);
-    // Este alerta vai te dizer o motivo exato do erro no celular
     alert(`Erro Push: ${err.message}`);
   }
 }
@@ -76,9 +72,8 @@ async function saveTokenToFirestore(token, role, username) {
       userAgent: navigator.userAgent
     }, { merge: true });
 
-    console.log(`✅ Token salvo no banco!`);
-    // Se você ver este alerta, funcionou 100%
-    // alert(`Tudo pronto! Notificações ativas para ${username}.`); 
+    console.log(`✅ Token salvo no banco para ${username}!`);
+    // alert(`Notificações ativas para ${username}!`); 
   } catch (e) {
     console.error('❌ Erro ao salvar no Firestore:', e);
     alert(`Erro ao salvar no banco: ${e.message}`);

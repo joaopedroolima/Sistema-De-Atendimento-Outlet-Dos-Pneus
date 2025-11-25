@@ -2812,10 +2812,10 @@ function renderReadyJobs(serviceJobs, alignmentQueue) {
             document.getElementById('dash-best-performer').textContent = bestPerformer.name;
             document.getElementById('dash-best-performer-avg').textContent = bestPerformer.avgStr;
             // ATUALIZADO: Armazena o job específico para o clique, em vez do nome do mecânico.
-            dashboardHighlightData.bestPerformer = bestPerformerJob ? { id: bestPerformerJob.id, type: bestPerformerJob.type } : null;
-            dashboardHighlightData.worstPerformer = worstPerformerJob ? { id: worstPerformerJob.id, type: worstPerformerJob.type } : null;
-            dashboardHighlightData.slowestCar = slowestCar.id ? { id: slowestCar.id, type: slowestCar.type } : null; // Mantido
-            dashboardHighlightData.fastestCar = fastestCar.id ? { id: fastestCar.id, type: fastestCar.type } : null; // Mantido
+            dashboardHighlightData.bestPerformer = bestPerformerJob ? { id: bestPerformerJob.id, type: bestPerformerJob.etapas } : null;
+            dashboardHighlightData.worstPerformer = worstPerformerJob ? { id: worstPerformerJob.id, type: worstPerformerJob.etapas } : null;
+            dashboardHighlightData.slowestCar = slowestCar.id ? { id: slowestCar.id, type: slowestCar.etapas } : null;
+            dashboardHighlightData.fastestCar = fastestCar.id ? { id: fastestCar.id, type: fastestCar.etapas } : null;
             document.getElementById('dash-worst-performer').textContent = worstPerformer.name;
             document.getElementById('dash-worst-performer-avg').textContent = worstPerformer.avgStr;
             document.getElementById('dash-slowest-car').textContent = slowestCar.car;

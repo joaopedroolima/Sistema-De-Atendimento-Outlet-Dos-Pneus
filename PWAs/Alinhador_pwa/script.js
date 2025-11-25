@@ -1,9 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 import { getFirestore, doc, addDoc, updateDoc, onSnapshot, collection, query, where, getDocs, serverTimestamp, Timestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-// MUDANÇA 1: Importação limpa
-import { registerForPushNotifications } from './push.js';
+import { registerForPushNotifications } from './push.js?v=FINAL';
 
 // =========================================================================
 // CONFIGURAÇÃO E ESTADO GLOBAL
@@ -20,7 +18,7 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
-const auth = getAuth(app); 
+const auth = getAuth(app); // NOVO: Inicializa o serviço de autenticação
 
 // --- Constantes de Papéis e Status ---
 const ALIGNER_ROLE = 'aligner';
@@ -50,7 +48,7 @@ let mecanicosGeral = [];
 let vendedores = [];
 let currentJobToConfirm = { id: null, confirmAction: null };
 let currentAlignmentJobForRework = null;
-let deferredInstallPrompt = null; 
+let deferredInstallPrompt = null; // Variável para guardar o evento de instalação
 
 // =========================================================================
 // INICIALIZAÇÃO E AUTENTICAÇÃO
@@ -59,11 +57,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     const savedUser = localStorage.getItem('currentUser');
 
     if (!savedUser) {
+        // Se não houver usuário, redireciona para a página de login central
         window.location.href = 'auth.html';
         return;
     }
 
     const user = JSON.parse(savedUser);
+    // Validação para garantir que apenas alinhadores ou gerentes acessem
     if (user.role !== ALIGNER_ROLE && user.role !== MANAGER_ROLE) {
         alert('Acesso negado. Esta área é restrita para Alinhadores e Gerentes.');
         localStorage.removeItem('currentUser');
@@ -72,8 +72,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     
     try {
+        // NOVO: Realiza o login anônimo para obter permissões de leitura/escrita
         await signInAnonymously(auth);
         console.log("Autenticação anônima com Firebase bem-sucedida.");
+        
+        // PASSO 7: Tenta registrar o usuário para receber notificações push.
+        registerForPushNotifications();
         
         postLoginSetup(user);
 
@@ -87,12 +91,14 @@ function postLoginSetup(user) {
     currentUserRole = user.role;
     currentUserName = user.username;
 
-    // Listeners do Banco
+    // --- MUDANÇA: Iniciamos os ouvintes do banco de dados PRIMEIRO ---
+    // Assim, o tempo real funciona independente de erros nos botões visuais
     setupRealtimeListeners(); 
     setupUserListener();
     setupServiceWorkerListener();
+    // ------------------------------------------------------------------
     
-    // Configuração dos Botões
+    // Configuração dos Botões e UI (Se algo falhar aqui, o banco já está rodando)
     const logoutBtn = document.getElementById('logout-btn');
     if (logoutBtn) logoutBtn.addEventListener('click', handleLogout);
 
@@ -105,14 +111,11 @@ function postLoginSetup(user) {
     const confirmBtn = document.getElementById("confirm-button");
     if (confirmBtn) confirmBtn.addEventListener("click", handleConfirmAction);
 
-    // MUDANÇA 2: Registra Push enviando QUEM é o usuário
-    // Isso garante que o token seja salvo com 'aligner' ou 'manager' no banco
-    registerForPushNotifications(user.role, user.username);
-
+    // O manipulador de instalação do PWA fica por último, pois é o mais sensível a erros
     try {
         setupPwaInstallHandlers(); 
     } catch (error) {
-        console.warn("Aviso: Botão de instalação PWA não configurado.", error);
+        console.warn("Aviso: Botão de instalação PWA não configurado (pode ser irrelevante no PC).", error);
     }
 }
 
@@ -125,24 +128,34 @@ function handleLogout() {
 // SERVICE WORKER E NOTIFICAÇÕES (CLIENT-SIDE)
 // =========================================================================
 
+/**
+ * Configura os handlers para o botão de instalação do PWA.
+ */
 function setupPwaInstallHandlers() {
     const installButton = document.getElementById('install-pwa-btn');
 
+    // Se o app já estiver rodando como um PWA instalado, o botão não é necessário.
     if (window.matchMedia('(display-mode: standalone)').matches) {
         return;
     }
 
+    // Ouve pelo evento que o navegador dispara quando o app se torna instalável.
     window.addEventListener('beforeinstallprompt', (e) => {
-        e.preventDefault(); 
-        deferredInstallPrompt = e; 
-        installButton.classList.remove('hidden'); 
+        e.preventDefault(); // Previne o prompt padrão do navegador
+        deferredInstallPrompt = e; // Guarda o evento
+        installButton.classList.remove('hidden'); // Mostra nosso botão
     });
 
+    // Adiciona o listener de clique para mostrar o prompt de instalação.
     installButton.addEventListener('click', async () => {
         if (deferredInstallPrompt) {
-            deferredInstallPrompt.prompt(); 
+            deferredInstallPrompt.prompt(); // Mostra o prompt de instalação
             const { outcome } = await deferredInstallPrompt.userChoice;
+            
+            // O prompt só pode ser usado uma vez.
             deferredInstallPrompt = null;
+            
+            // Esconde o botão após a interação.
             installButton.classList.add('hidden');
         }
     });
@@ -151,19 +164,13 @@ function setupPwaInstallHandlers() {
 }
 
 function setupServiceWorkerListener() {
-    // MUDANÇA 3: Atualizado para ouvir o evento PLAY_SOUND (Maiúsculo)
-    // Isso deve bater com o que colocamos no service-worker.js
     navigator.serviceWorker.addEventListener('message', event => {
         console.log('Página: Mensagem recebida do Service Worker:', event.data);
-        
-        // Verifica PLAY_SOUND (novo padrão) ou play-sound (legado)
-        if (event.data && (event.data.type === 'PLAY_SOUND' || event.data.type === 'play-sound')) {
-            console.log("🔊 Tocando notificação sonora...");
+        if (event.data && event.data.type === 'play-sound') {
             const notificationSound = new Audio('sounds/notify.mp3');
-            notificationSound.volume = 1.0;
             notificationSound.play().catch(error => {
-                console.warn('Não foi possível tocar o som (bloqueio do navegador):', error);
-                // Fallback visual opcional
+                // A interação do usuário pode ser necessária para tocar o som
+                console.warn('Não foi possível tocar o som da notificação automaticamente:', error);
                 alertUser('Nova notificação recebida!', 'success');
             });
         }
@@ -204,18 +211,16 @@ function setupRealtimeListeners() {
 }
 
 function populateDropdowns() {
+    // Popula dropdown de vendedores (para gerentes e alinhadores)
     if (currentUserRole === MANAGER_ROLE || currentUserRole === ALIGNER_ROLE) {
         const vendedorSelect = document.getElementById('aliVendedorName');
-        if (vendedorSelect) {
-            vendedorSelect.disabled = false; 
-            vendedorSelect.innerHTML = vendedores.map(v => `<option value="${v.username}">${v.username}</option>`).join('');
-        }
+        vendedorSelect.disabled = false; // Garante que o campo não esteja desabilitado
+        vendedorSelect.innerHTML = vendedores.map(v => `<option value="${v.username}">${v.username}</option>`).join('');
     }
     
+    // Popula dropdown de mecânicos no modal de retrabalho
     const reworkMechanicSelect = document.getElementById('rework-mechanic-select');
-    if (reworkMechanicSelect) {
-        reworkMechanicSelect.innerHTML = mecanicosGeral.map(m => `<option value="${m.username}">${m.username}</option>`).join('');
-    }
+    reworkMechanicSelect.innerHTML = mecanicosGeral.map(m => `<option value="${m.username}">${m.username}</option>`).join('');
 }
 
 // =========================================================================
@@ -247,24 +252,24 @@ function renderAlignmentQueue() {
 
     if (activeCars.length === 0) {
         tableContainer.innerHTML = '';
-        if(emptyMessage) emptyMessage.style.display = 'block';
+        if (emptyMessage) emptyMessage.style.display = 'block';
         return;
     }
     
-    if(emptyMessage) emptyMessage.style.display = 'none';
+    if (emptyMessage) emptyMessage.style.display = 'none';
 
     const nextCarIndex = activeCars.findIndex(c => c.status === STATUS_WAITING);
 
     let tableHTML = `
         <table class="min-w-full divide-y divide-gray-200">
-            <thead class="bg-gray-50">
+            <thead class="bg-gray-50 sticky top-0 z-10">
                 <tr>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">#</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Modelo / Placa</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vendedor</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                    <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Mover</th>
-                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
+                    <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">#</th>
+                    <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Veículo</th>
+                    <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">Vendedor</th>
+                    <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th class="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
+                    <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Mover</th>
                 </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
@@ -280,69 +285,78 @@ function renderAlignmentQueue() {
                             isWaitingGS ? 'bg-red-100 text-red-800' :
                             'bg-blue-100 text-blue-800';
         const statusText = isAttending ? 'Em Atendimento' : isWaitingGS ? `Aguardando GS` : 'Disponível';
-        const rowClass = isWaitingGS ? 'bg-red-50/50' : (isNextWaiting ? 'bg-yellow-50/50' : '');
+        const rowClass = isWaitingGS ? 'bg-red-50/30' : (isNextWaiting ? 'bg-yellow-50/30' : '');
 
+        // Ícone Lixeira
         const discardIcon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>`;
-        const returnIcon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>`;
+
+        // Botão Deletar (Só aparece se for GERENTE)
+        const deleteButton = (currentUserRole === MANAGER_ROLE) 
+            ? `<button onclick="showDiscardAlignmentConfirmation('${car.id}')" title="Descartar" class="p-1 text-red-400 hover:text-red-600 transition">${discardIcon}</button>`
+            : ``;
 
         let actions = '';
+        
         if (isAttending) {
+            // Apenas Botão Pronto + (Lixeira se gerente)
             actions = `
-                <button onclick="showReturnToMechanicModal('${car.id}')" title="Retornar ao Mecânico" class="p-2 text-blue-600 hover:bg-blue-100 rounded-full transition" ${!car.serviceJobId ? 'disabled' : ''}>${returnIcon}</button>
-                <button onclick="showDiscardAlignmentConfirmation('${car.id}')" title="Descartar / Perdido" class="p-1 text-red-600 hover:bg-red-100 rounded-full transition">${discardIcon}</button>
-                <button onclick="showAlignmentReadyConfirmation('${car.id}')" class="text-xs font-medium bg-green-500 text-white py-1 px-3 rounded-md hover:bg-green-600 transition">Pronto</button>
+                <div class="flex items-center justify-end gap-1">
+                    ${deleteButton}
+                    <button onclick="showAlignmentReadyConfirmation('${car.id}')" class="text-xs font-bold bg-green-500 text-white py-1 px-2 rounded hover:bg-green-600">Pronto</button>
+                </div>
             `;
         } else if (isNextWaiting) {
+            // Apenas Botão Iniciar + (Lixeira se gerente)
             actions = `
-                <button onclick="showReturnToMechanicModal('${car.id}')" title="Retornar ao Mecânico" class="p-2 text-blue-600 hover:bg-blue-100 rounded-full transition" ${!car.serviceJobId ? 'disabled' : ''}>${returnIcon}</button>
-                <button onclick="showDiscardAlignmentConfirmation('${car.id}')" title="Descartar / Perdido" class="p-1 text-red-600 hover:bg-red-100 rounded-full transition">${discardIcon}</button>
-                <button onclick="updateAlignmentStatus('${car.id}', '${STATUS_ATTENDING}')" class="text-xs font-medium bg-yellow-500 text-white py-1 px-3 rounded-md hover:bg-yellow-600 transition">Iniciar</button>
+                <div class="flex items-center justify-end gap-1">
+                    ${deleteButton}
+                    <button onclick="updateAlignmentStatus('${car.id}', '${STATUS_ATTENDING}')" class="text-xs font-bold bg-yellow-500 text-white py-1 px-2 rounded hover:bg-yellow-600">Iniciar</button>
+                </div>
             `;
         } else {
+            // Apenas Lixeira (se gerente)
             actions = `
-                <button onclick="showReturnToMechanicModal('${car.id}')" title="Retornar ao Mecânico" class="p-2 text-blue-600 hover:bg-blue-100 rounded-full transition" ${!car.serviceJobId ? 'disabled' : ''}>${returnIcon}</button>
-                <button onclick="showDiscardAlignmentConfirmation('${car.id}')" title="Descartar / Perdido" class="p-1 text-red-600 hover:bg-red-100 rounded-full transition">${discardIcon}</button>
-                <span class="text-xs text-gray-400 pr-2">Na fila...</span>
+                <div class="flex items-center justify-end gap-1">
+                    ${deleteButton}
+                </div>
             `;
         }
 
+        // Botões de Mover
         let moverButtons = '';
         const canMove = currentUserRole === MANAGER_ROLE && isWaiting;
-
         const waitingOnlyList = activeCars.filter(c => c.status === STATUS_WAITING);
         const waitingIndex = waitingOnlyList.findIndex(c => c.id === car.id);
         const isLastWaiting = waitingIndex === waitingOnlyList.length - 1;
         const isFirstWaiting = waitingIndex === 0;
 
         moverButtons = `
-            <div class="flex items-center justify-center space-x-1">
-                <button onclick="moveAlignmentUp('${car.id}')"
-                        class="text-sm p-1 rounded-full text-blue-600 hover:bg-gray-200 disabled:text-gray-300 transition"
-                        ${!canMove || isFirstWaiting ? 'disabled' : ''} title="Mover para cima">&#9650;</button>
-                <button onclick="moveAlignmentDown('${car.id}')"
-                        class="text-sm p-1 rounded-full text-blue-600 hover:bg-gray-200 disabled:text-gray-300 transition"
-                        ${!canMove || isLastWaiting ? 'disabled' : ''} title="Mover para baixo">&#9660;</button>
+            <div class="flex flex-col sm:flex-row items-center justify-center">
+                <button onclick="moveAlignmentUp('${car.id}')" class="text-gray-400 hover:text-blue-600 disabled:opacity-20 px-1" ${!canMove || isFirstWaiting ? 'disabled' : ''}>▲</button>
+                <button onclick="moveAlignmentDown('${car.id}')" class="text-gray-400 hover:text-blue-600 disabled:opacity-20 px-1" ${!canMove || isLastWaiting ? 'disabled' : ''}>▼</button>
             </div>
         `;
 
         tableHTML += `
-            <tr class="${rowClass}">
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${index + 1}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    <span class="font-semibold">${car.carModel}</span>
-                    <span class="text-xs text-gray-500 block">${car.licensePlate}</span>
-                </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">${car.vendedorName || 'N/A'}</td>
-                <td class="px-6 py-4 whitespace-nowrap">
+            <tr class="${rowClass} hover:bg-gray-50 transition-colors">
+                <td class="px-3 py-3 whitespace-nowrap text-xs font-bold text-gray-500">${index + 1}</td>
+                <td class="px-3 py-3 whitespace-nowrap">
                     <div class="flex flex-col">
-                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusColor} self-start">${statusText}</span>
-                        ${isWaitingGS ? `<div class="text-xs text-gray-500 pt-1 description-truncate" title="${car.gsDescription}">${car.gsDescription}</div>` : ''}
+                        <span class="text-sm font-bold text-gray-900 uppercase">${car.licensePlate}</span>
+                        <span class="text-xs text-gray-500 truncate max-w-[100px]">${car.carModel}</span>
                     </div>
                 </td>
-                <td class="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">${moverButtons}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <div class="flex items-center space-x-2 justify-end">${actions}</div>
+                <td class="px-3 py-3 whitespace-nowrap text-xs text-gray-500 hidden sm:table-cell">${car.vendedorName || '-'}</td>
+                <td class="px-3 py-3 whitespace-nowrap">
+                    <div class="flex flex-col items-start">
+                        <span class="px-2 py-0.5 inline-flex text-[10px] leading-4 font-semibold rounded-full ${statusColor} border border-opacity-20 border-black">
+                            ${statusText}
+                        </span>
+                        ${isWaitingGS ? `<span class="text-[10px] text-gray-400 mt-1 truncate max-w-[80px]" title="${car.gsDescription}">${car.gsDescription}</span>` : ''}
+                    </div>
                 </td>
+                <td class="px-3 py-3 whitespace-nowrap text-right">${actions}</td>
+                <td class="px-1 py-3 whitespace-nowrap text-center">${moverButtons}</td>
             </tr>
         `;
     });
@@ -389,7 +403,7 @@ async function updateAlignmentStatus(docId, newStatus) {
     let dataToUpdate = { status: newStatus };
     if (newStatus === STATUS_ATTENDING) {
         dataToUpdate.alignmentStartedAt = serverTimestamp();
-    } else if (newStatus === 'Done') { 
+    } else if (newStatus === 'Done') { // 'Done' é um gatilho interno para 'Pronto'
         dataToUpdate.status = STATUS_READY;
         dataToUpdate.readyAt = serverTimestamp();
     }
@@ -555,6 +569,37 @@ async function moveAlignmentUp(docId) {
     }
 }
 
+async function moveAlignment(docId, direction) {
+    if (currentUserRole !== MANAGER_ROLE) return alertUser("Apenas Gerentes podem reordenar a fila.");
+
+    const sortedQueue = getSortedAlignmentQueue().filter(c => c.status === STATUS_WAITING);
+    const currentIndex = sortedQueue.findIndex(car => car.id === docId);
+    if (currentIndex === -1) return;
+
+    const swapIndex = currentIndex + direction;
+    if (swapIndex < 0 || swapIndex >= sortedQueue.length) return;
+
+    const currentCar = sortedQueue[currentIndex];
+    const swapCar = sortedQueue[swapIndex];
+
+    // Troca os timestamps para reordenar
+    const newCurrentTimestamp = swapCar.timestamp;
+    const newSwapTimestamp = currentCar.timestamp;
+
+    try {
+        const currentRef = doc(db, ALIGNMENT_COLLECTION_PATH, currentCar.id);
+        await updateDoc(currentRef, { timestamp: newCurrentTimestamp });
+
+        const swapRef = doc(db, ALIGNMENT_COLLECTION_PATH, swapCar.id);
+        await updateDoc(swapRef, { timestamp: newSwapTimestamp });
+        
+        alertUser("Ordem da fila atualizada.", "success");
+    } catch (e) {
+        console.error("Erro ao reordenar:", e);
+        alertUser("Erro ao atualizar a ordem no banco de dados.");
+    }
+}
+
 async function moveAlignmentDown(docId) {
     if (currentUserRole !== MANAGER_ROLE) return alertUser("Acesso negado. Apenas Gerentes podem mover carros na fila.");
 
@@ -578,19 +623,16 @@ async function moveAlignmentDown(docId) {
     }
 }
 
+
+
 function alertUser(message, type = 'error') {
     const errorElement = document.getElementById('alignment-error');
-    if (errorElement) {
-        errorElement.textContent = message;
-        errorElement.className = `mt-3 text-center text-sm font-medium ${type === 'success' ? 'text-green-600' : 'text-red-600'}`;
-        setTimeout(() => errorElement.textContent = '', 5000);
-    } else {
-        alert(message);
-    }
+    errorElement.textContent = message;
+    errorElement.className = `mt-3 text-center text-sm font-medium ${type === 'success' ? 'text-green-600' : 'text-red-600'}`;
+    setTimeout(() => errorElement.textContent = '', 5000);
 }
 
-// Expondo funções globais chamadas pelo HTML
+// Expondo funções globais que são chamadas pelo HTML
 window.updateAlignmentStatus = updateAlignmentStatus;
 window.moveAlignmentUp = moveAlignmentUp;
 window.moveAlignmentDown = moveAlignmentDown;
-window.handleLogout = handleLogout;

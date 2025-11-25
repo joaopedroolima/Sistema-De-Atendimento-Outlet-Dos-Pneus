@@ -1,9 +1,31 @@
 /* Importação da fonte Inter para consistência visual */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
 
-body {
+
+/* Remove margens padrão e garante altura total */
+html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow-x: hidden; /* Evita rolagem horizontal acidental */
     font-family: 'Inter', sans-serif;
     background-color: #f3f4f6; /* bg-gray-100 */
+}
+
+/* Se estiver usando .app-container, force ele a ocupar tudo no mobile */
+@media (max-width: 640px) {
+    .app-container, body > div {
+        width: 100% !important;
+        margin: 0 !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+    }
+    
+    /* Ajuste fino para a tabela não estourar */
+    table {
+        width: 100%;
+    }
 }
 
 .app-container {

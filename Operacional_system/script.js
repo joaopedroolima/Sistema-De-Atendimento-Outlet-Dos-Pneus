@@ -205,7 +205,7 @@ function postLoginSetup(user) {
 
     } else if (role === VENDEDOR_ROLE) {
         // Req 1.4: Visão do Vendedor
-        [tabServicos, tabAlinhamento, btnMarketing, alignmentForm, alignmentFormTitle].forEach(el => el.classList.remove('hidden', 'aligner-hidden'));
+        [tabServicos, tabAlinhamento, alignmentForm, alignmentFormTitle].forEach(el => el.classList.remove('hidden', 'aligner-hidden'));
         [tabMonitor, tabAdmin].forEach(el => el.classList.add('hidden'));
 
         tabServicos.classList.add('active');
@@ -2213,16 +2213,15 @@ function renderAlignmentQueue(cars) {
 
         // Ações disponíveis para Alinhador ou Gerente
         const canTakeAction = currentUserRole === ALIGNER_ROLE || currentUserRole === MANAGER_ROLE;
+        const isManager = currentUserRole === MANAGER_ROLE;
 
         if (isAttending) {
              actions = `
                  <div class="flex items-center space-x-2 justify-end">
-                     <button onclick="showReturnToMechanicModal('${car.id}')" title="Retornar ao Mecânico" class="p-2 text-blue-600 hover:bg-blue-100 rounded-full transition" ${!canTakeAction ? 'disabled' : ''}>
-                         ${returnIcon}
-                     </button>
-                     <button onclick="showDiscardAlignmentConfirmation('${car.id}')" title="Descartar / Perdido" class="p-1 text-red-600 hover:bg-red-100 rounded-full transition" ${!canTakeAction ? 'disabled' : ''}>
-                         ${discardIcon}
-                     </button>
+                    ${isManager ? `
+                        <button onclick="showReturnToMechanicModal('${car.id}')" title="Retornar ao Mecânico" class="p-2 text-blue-600 hover:bg-blue-100 rounded-full transition">${returnIcon}</button>
+                        <button onclick="showDiscardAlignmentConfirmation('${car.id}')" title="Descartar / Perdido" class="p-1 text-red-600 hover:bg-red-100 rounded-full transition">${discardIcon}</button>
+                    ` : ''}
                      <button onclick="showAlignmentReadyConfirmation('${car.id}')"
                          class="text-xs font-medium bg-green-500 text-white py-1 px-3 rounded-md hover:bg-green-600 transition"
                          ${!canTakeAction ? 'disabled' : ''}>
@@ -2233,12 +2232,10 @@ function renderAlignmentQueue(cars) {
         } else if (isNextWaiting) {
             actions = `
                 <div class="flex items-center space-x-2 justify-end">
-                    <button onclick="showReturnToMechanicModal('${car.id}')" title="Retornar ao Mecânico" class="p-2 text-blue-600 hover:bg-blue-100 rounded-full transition" ${!canTakeAction ? 'disabled' : ''} ${!car.serviceJobId ? 'disabled title="Ação não permitida para adição manual"' : ''}>
-                        ${returnIcon}
-                    </button>
-                    <button onclick="showDiscardAlignmentConfirmation('${car.id}')" title="Descartar / Perdido" class="p-1 text-red-600 hover:bg-red-100 rounded-full transition" ${!canTakeAction ? 'disabled' : ''}>
-                        ${discardIcon}
-                    </button>
+                    ${isManager ? `
+                        <button onclick="showReturnToMechanicModal('${car.id}')" title="Retornar ao Mecânico" class="p-2 text-blue-600 hover:bg-blue-100 rounded-full transition" ${!car.serviceJobId ? 'disabled title="Ação não permitida para adição manual"' : ''}>${returnIcon}</button>
+                        <button onclick="showDiscardAlignmentConfirmation('${car.id}')" title="Descartar / Perdido" class="p-1 text-red-600 hover:bg-red-100 rounded-full transition">${discardIcon}</button>
+                    ` : ''}
                     <button onclick="updateAlignmentStatus('${car.id}', '${STATUS_ATTENDING}')"
                         class="text-xs font-medium bg-yellow-500 text-white py-1 px-3 rounded-md hover:bg-yellow-600 transition"
                         ${!canTakeAction ? 'disabled' : ''}>
@@ -2250,12 +2247,10 @@ function renderAlignmentQueue(cars) {
             // Para os outros carros na fila, também permite descartar ou retornar, se tiverem permissão.
             actions = `
                 <div class="flex items-center space-x-2 justify-end">
-                    <button onclick="showReturnToMechanicModal('${car.id}')" title="Retornar ao Mecânico" class="p-2 text-blue-600 hover:bg-blue-100 rounded-full transition" ${!canTakeAction || !car.serviceJobId ? 'disabled' : ''} ${!car.serviceJobId ? 'title="Ação não permitida para adição manual"' : ''}>
-                        ${returnIcon}
-                    </button>
-                    <button onclick="showDiscardAlignmentConfirmation('${car.id}')" title="Descartar / Perdido" class="p-1 text-red-600 hover:bg-red-100 rounded-full transition" ${!canTakeAction ? 'disabled' : ''}>
-                        ${discardIcon}
-                    </button>
+                    ${isManager ? `
+                        <button onclick="showReturnToMechanicModal('${car.id}')" title="Retornar ao Mecânico" class="p-2 text-blue-600 hover:bg-blue-100 rounded-full transition" ${!car.serviceJobId ? 'disabled title="Ação não permitida para adição manual"' : ''}>${returnIcon}</button>
+                        <button onclick="showDiscardAlignmentConfirmation('${car.id}')" title="Descartar / Perdido" class="p-1 text-red-600 hover:bg-red-100 rounded-full transition">${discardIcon}</button>
+                    ` : ''}
                     <span class="text-xs text-gray-400 pr-2">Na fila...</span>
                 </div>
             `;

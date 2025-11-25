@@ -2606,13 +2606,17 @@ function renderReadyJobs(serviceJobs, alignmentQueue) {
                 // --- Cálculo de Duração por Etapa (Req 5.3) ---
                 const waitTimeMs = calculateDuration(job.timestamp, job.gsStartedAt);
                 const gsDurationMs = calculateDuration(job.gsStartedAt, job.gsFinishedAt);
-                const tsDurationMs = calculateDuration(job.tsStartedAt, job.tsFinishedAt); // tsStartedAt precisa ser adicionado
+                const tsDurationMs = calculateDuration(job.tsStartedAt, job.tsFinishedAt);
                 if (waitTimeMs > 0) allWaitTimes.push(waitTimeMs);
-                if (gsDurationMs > 0) allGsDurations.push(gsDurationMs);
+                // CORREÇÃO: Garante que a etapa seja contada mesmo se a duração for 0.
+                // Apenas durações positivas são usadas para calcular a média.
+                if (job.gsFinishedAt) {
+                    allGsDurations.push(gsDurationMs > 0 ? gsDurationMs : 0);
+                }
 
                 // Adiciona stats do Mecânico Geral
                 if (mechanicStats[mechanic]) {
-                    mechanicStats[mechanic].count++;
+                    mechanicStats[mechanic].count++; // Contagem por profissional
                     // A performance do mecânico é medida pelo tempo de trabalho real
                     mechanicStats[mechanic].totalDurationMs += gsDurationMs > 0 ? gsDurationMs : totalDurationMs;
                 }
@@ -2637,7 +2641,11 @@ function renderReadyJobs(serviceJobs, alignmentQueue) {
                         mecsEnvolvidos.push(ALIGNMENT_MECHANIC);
 
                         aliDurationMs = calculateDuration(aliJob.alignmentStartedAt, aliJob.readyAt);
-                        if (aliDurationMs > 0) allAliDurations.push(aliDurationMs);
+                        // CORREÇÃO: Garante que a etapa seja contada mesmo se a duração for 0.
+                        // Apenas durações positivas são usadas para calcular a média.
+                        if (aliJob.readyAt) {
+                            allAliDurations.push(aliDurationMs > 0 ? aliDurationMs : 0);
+                        }
 
                         if (mechanicStats[ALIGNMENT_MECHANIC]) {
                             mechanicStats[ALIGNMENT_MECHANIC].count++;
@@ -2705,7 +2713,11 @@ function renderReadyJobs(serviceJobs, alignmentQueue) {
 
                 const totalDurationMs = calculateDuration(car.timestamp, car.finalizedAt);
                 const aliDurationMs = calculateDuration(car.alignmentStartedAt, car.readyAt);
-                if (aliDurationMs > 0) allAliDurations.push(aliDurationMs);
+                // CORREÇÃO: Garante que a etapa seja contada mesmo se a duração for 0.
+                // Apenas durações positivas são usadas para calcular a média.
+                if (car.readyAt) {
+                    allAliDurations.push(aliDurationMs > 0 ? aliDurationMs : 0);
+                }
 
                 if (mechanicStats[ALIGNMENT_MECHANIC]) {
                     mechanicStats[ALIGNMENT_MECHANIC].count++;

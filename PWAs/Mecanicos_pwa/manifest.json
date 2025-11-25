@@ -4,7 +4,7 @@
   "description": "Aplicativo para mecânicos do sistema de atendimento da Outlet dos Pneus.",
   "start_url": "index.html",
   "display": "standalone",
-  "background_color": "#FFFFFF",
+  "background_color": "#1e59a2",
   "theme_color": "#4A90E2",
   "icons": [
     {

@@ -1,6 +1,3 @@
-// =========================================================================
-// PUSH INTELIGENTE - MECÂNICOS (CORRIGIDO)
-// =========================================================================
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import { getMessaging, getToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-messaging.js";
 import { getFirestore, doc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
@@ -20,47 +17,49 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const messaging = getMessaging(app);
 
-// SUA CHAVE CORRIGIDA (Do Console do Firebase)
+// SUA CHAVE VAPID (Confira se não há espaços extras no final)
 const VAPID_PUBLIC_KEY = 'BI4ETZDqademtj-ZFFq5f93hUKtLAuJGYt0DsfF12wg09DkmYVz5xwlg2gmC0qBGrtQBuUtcBBysIWaZIQjnur0'; 
 
 export async function registerForPushNotifications(role, username) {
-  console.log(`🔧 [${username}] Iniciando registro de Push...`);
+  console.log(`🔧 [${username}] Iniciando processo de Push...`);
 
   if (!('serviceWorker' in navigator)) {
-      console.warn('Service Worker não suportado.');
+      alert('Erro: Este navegador não suporta Service Workers.');
       return;
   }
 
   try {
-    // 1. OBRIGATÓRIO: Registrar o Service Worker antes de usar
-    // (Isso estava faltando e causava o travamento)
-    const registration = await navigator.serviceWorker.register('./service-worker.js', { scope: './' });
-    console.log('✅ Service Worker registrado.');
+    // 1. Aguarda o Service Worker estar PRONTO e ATIVO (Crucial para Android)
+    const registration = await navigator.serviceWorker.ready;
+    console.log('✅ Service Worker detectado e pronto:', registration.scope);
 
-    // 2. Pede permissão
+    // 2. Pede permissão (No Android, isso deve ocorrer após um clique)
     const permission = await Notification.requestPermission();
+    
     if (permission !== 'granted') {
-      console.warn('❌ Permissão de notificação negada.');
+      alert('Permissão de notificação foi negada ou fechada.');
       return;
     }
 
-    // 3. Aguarda ele estar ativo
-    await navigator.serviceWorker.ready;
+    // 3. Tenta obter o Token
+    // alert('Gerando token... aguarde.'); // (Opcional: descomente se quiser ver esse passo)
 
-    // 4. Pede o Token
     const currentToken = await getToken(messaging, {
       vapidKey: VAPID_PUBLIC_KEY,
       serviceWorkerRegistration: registration
     });
 
     if (currentToken) {
+      console.log('Token gerado:', currentToken);
       await saveTokenToFirestore(currentToken, role, username);
     } else {
-      console.log('⚠️ Nenhum token disponível.');
+      alert('Erro: O Firebase não retornou nenhum token. Verifique a VAPID Key.');
     }
 
   } catch (err) {
-    console.error('❌ Erro ao registrar notificações:', err);
+    console.error('❌ Erro fatal no Push:', err);
+    // Este alerta vai te dizer o motivo exato do erro no celular
+    alert(`Erro Push: ${err.message}`);
   }
 }
 
@@ -73,11 +72,15 @@ async function saveTokenToFirestore(token, role, username) {
       role: role,
       username: username,
       updatedAt: serverTimestamp(),
-      platform: 'web_mechanic'
+      platform: 'web_pwa',
+      userAgent: navigator.userAgent
     }, { merge: true });
 
-    console.log(`✅ Token vinculado com sucesso: ${username} (${role})`);
+    console.log(`✅ Token salvo no banco!`);
+    // Se você ver este alerta, funcionou 100%
+    // alert(`Tudo pronto! Notificações ativas para ${username}.`); 
   } catch (e) {
-    console.error('❌ Erro ao salvar token no banco:', e);
+    console.error('❌ Erro ao salvar no Firestore:', e);
+    alert(`Erro ao salvar no banco: ${e.message}`);
   }
 }

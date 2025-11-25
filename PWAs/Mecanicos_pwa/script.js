@@ -1,8 +1,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-import { getFirestore, doc, updateDoc, onSnapshot, collection, query, where, getDoc, serverTimestamp, Timestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { getFirestore, doc, updateDoc, onSnapshot, collection, query, where, getDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-// Importação CORRETA da nova função de push
+// Importação CORRETA da função de push blindada
 import { registerForPushNotifications } from './push.js';
 
 // =========================================================================
@@ -27,7 +27,7 @@ if (isCanvasEnvironment && typeof __firebase_config !== 'undefined') {
     try {
         firebaseConfig = JSON.parse(__firebase_config);
     } catch (e) {
-        console.error("Erro ao fazer parse da configuração do Firebase da plataforma. Usando placeholders.", e);
+        console.error("Erro config:", e);
         firebaseConfig = LOCAL_FIREBASE_CONFIG;
     }
 } else {
@@ -35,30 +35,39 @@ if (isCanvasEnvironment && typeof __firebase_config !== 'undefined') {
 }
 
 // =========================================================================
-// ÁUDIO GLOBAL (FIX PARA MOBILE/CHROME)
+// ÁUDIO E NOTIFICAÇÕES (FIX ANDROID)
 // =========================================================================
 const notificationSound = new Audio('sounds/notify.mp3');
-let audioUnlocked = false;
+let interactionUnlocked = false;
 
-// Função para desbloquear o áudio na primeira interação
-function unlockAudio() {
-    if (audioUnlocked) return;
-    
-    notificationSound.volume = 0.1; // Volume mínimo
+// Função chamada no primeiro clique para liberar áudio e pedir notificação
+async function unlockFeatures() {
+    if (interactionUnlocked) return;
+    interactionUnlocked = true;
+
+    // 1. Desbloqueia Áudio (toca mudo rapidinho)
+    notificationSound.volume = 0.1;
     notificationSound.play().then(() => {
         notificationSound.pause();
         notificationSound.currentTime = 0;
-        audioUnlocked = true;
-        notificationSound.volume = 1.0; // Restaura volume máximo
-        console.log("🔊 Áudio desbloqueado pelo usuário!");
-    }).catch(e => {
-        console.warn("Ainda não foi possível desbloquear o áudio:", e);
-    });
+        notificationSound.volume = 1.0;
+        console.log("🔊 Áudio desbloqueado no Android.");
+    }).catch(e => console.warn("Ainda não foi possível desbloquear o áudio:", e));
+
+    // 2. Tenta Registrar Push Notifications (Agora permitido pois é um evento de clique)
+    if (currentUserRole && currentUserName) {
+        console.log("📲 Tentando registrar Push após interação do usuário...");
+        registerForPushNotifications(currentUserRole, currentUserName);
+    }
+
+    // Remove os ouvintes para não rodar de novo
+    document.body.removeEventListener('click', unlockFeatures);
+    document.body.removeEventListener('touchstart', unlockFeatures);
 }
 
-// Adiciona os ouvintes para desbloqueio imediato
-document.body.addEventListener('click', unlockAudio, { once: true });
-document.body.addEventListener('touchstart', unlockAudio, { once: true });
+// Adiciona os ouvintes globais
+document.body.addEventListener('click', unlockFeatures);
+document.body.addEventListener('touchstart', unlockFeatures);
 
 // =========================================================================
 // INICIALIZAÇÃO E AUTENTICAÇÃO
@@ -79,7 +88,7 @@ function postLoginSetup(user) {
     currentUserRole = user.role;
     currentUserName = user.username;
 
-    // Se o usuário não for um mecânico, bloqueia o acesso.
+    // Verifica se é Mecânico
     if (currentUserRole !== MECANICO_ROLE) {
         document.body.innerHTML = `<div class="w-screen h-screen flex items-center justify-center bg-red-100 text-red-800 p-8">
             <div class="text-center">
@@ -96,61 +105,66 @@ function postLoginSetup(user) {
 
     setupRealtimeListeners();
 
-    // REGISTRA O TOKEN COM O NOME DO USUÁRIO
-    registerForPushNotifications(user.role, user.username);
+    // Se já tiver permissão garantida, tenta registrar direto.
+    if (Notification.permission === 'granted') {
+        registerForPushNotifications(user.role, user.username);
+    } else {
+        console.log("⚠️ Aguardando clique para pedir notificação no Android.");
+    }
 }
 
 window.handleLogout = function() {
     currentUserRole = null;
     currentUserName = null;
     localStorage.removeItem('currentUser');
-    // Redireciona para a página de login local do PWA
     window.location.href = 'auth.html';
 }
 
 function initializeAppAndAuth() {
-    // Tenta registrar o SW logo no início para garantir
+    // 1. Registra SW imediatamente
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('./service-worker.js', { scope: './' })
-            .then(reg => console.log("✅ SW registrado na inicialização:", reg.scope))
-            .catch(err => console.error("❌ Falha ao registrar SW na inicialização:", err));
+            .then(reg => console.log("✅ SW registrado:", reg.scope))
+            .catch(err => console.error("❌ Erro SW:", err));
     }
 
-    // Verifica se há um usuário salvo no armazenamento local.
+    // 2. Verifica Login Local
     const savedUser = localStorage.getItem('currentUser');
     if (!savedUser) {
-        window.location.replace('auth.html'); // Redireciona para a página de login local
+        window.location.replace('auth.html');
         return;
     }
 
     try {
         const user = JSON.parse(savedUser);
-        isAuthReady = true;
-        postLoginSetup(user);
+        // 3. Login Anônimo
+        signInAnonymously(auth).then(() => {
+            isAuthReady = true;
+            console.log("Autenticação anônima OK.");
+            postLoginSetup(user);
+        }).catch((e) => {
+            console.error("Erro auth anônima:", e);
+            alert("Erro de conexão. Recarregue a página.");
+        });
     } catch (e) {
-        console.error("Erro ao inicializar:", e);
-        document.body.innerHTML = `<p>Erro fatal ao carregar dados do usuário. Tente fazer login novamente.</p>`;
+        console.error("Erro init:", e);
+        localStorage.removeItem('currentUser');
+        window.location.replace('auth.html');
     }
 }
 
 // =========================================================================
-// ESTADO E CONSTANTES
+// LÓGICA DE NEGÓCIO (MECÂNICOS)
 // =========================================================================
 let serviceJobs = [];
 let currentJobToConfirm = { id: null, type: null, confirmAction: null, serviceType: null };
 
-// COLEÇÕES DO FIRESTORE
 const SERVICE_COLLECTION_PATH = `/artifacts/${appId}/public/data/serviceJobs`;
 
-// STATUS GLOBAIS
 const STATUS_PENDING = 'Pendente';
 const STATUS_READY = 'Pronto para Pagamento';
 const STATUS_GS_FINISHED = 'Serviço Geral Concluído';
 const STATUS_TS_FINISHED = 'Serviço Pneus Concluído';
-
-// =========================================================================
-// LÓGICA DE NEGÓCIO E AÇÕES
-// =========================================================================
 
 async function markServiceReady(docId, serviceType) {
     if (serviceType !== 'GS') return;
@@ -165,26 +179,28 @@ async function markServiceReady(docId, serviceType) {
         await updateDoc(serviceDocRef, dataToUpdate);
 
         const serviceDoc = await getDoc(serviceDocRef);
-        if (!serviceDoc.exists()) throw new Error("Documento de Serviço não encontrado.");
+        if (!serviceDoc.exists()) throw new Error("Documento não encontrado.");
 
         const job = serviceDoc.data();
         const isGsReady = job.statusGS === STATUS_GS_FINISHED;
         const isTsReady = job.statusTS === STATUS_TS_FINISHED || job.statusTS === null;
 
-        // Se todas as etapas estiverem prontas e não precisar de alinhamento, o serviço fica pronto para pagamento
         if (isGsReady && isTsReady && !job.requiresAlignment) {
             await updateDoc(serviceDocRef, { status: STATUS_READY });
         }
+        // Recarrega página para garantir atualização visual
+        // window.location.reload(); // Opcional, o listener deve cuidar disso
     } catch (error) {
-        console.error("Erro ao marcar serviço como pronto:", error);
-        alert(`Erro no Banco de Dados: ${error.message}`);
+        console.error("Erro ao marcar pronto:", error);
+        alert(`Erro: ${error.message}`);
     }
 }
 
 // =========================================================================
-// MODAL DE CONFIRMAÇÃO
+// INTERFACE E MODAIS
 // =========================================================================
 
+// Listener do Botão "Sim, Confirmar"
 const confirmBtn = document.getElementById("confirm-button");
 if (confirmBtn) {
     confirmBtn.addEventListener("click", () => {
@@ -193,7 +209,6 @@ if (confirmBtn) {
             hideConfirmationModal();
             return;
         }
-
         if (confirmAction === "service") {
             markServiceReady(id, serviceType);
         }
@@ -210,18 +225,14 @@ function showConfirmationModal(id, type, title, message, confirmAction, serviceT
 
 window.hideConfirmationModal = function() {
     document.getElementById('confirmation-modal').classList.add('hidden');
-    currentJobToConfirm = { id: null, type: null, confirmAction: null, serviceType: null };
+    currentJobToConfirm = { id: null, confirmAction: null };
 }
 
 window.showServiceReadyConfirmation = function(docId, serviceType) {
-    const title = 'Confirmar Serviço Concluído';
+    const title = 'Confirmar Conclusão';
     const message = `Tem certeza de que deseja marcar este serviço como <strong>PRONTO</strong>?`;
     showConfirmationModal(docId, 'service', title, message, 'service', serviceType);
 }
-
-// =========================================================================
-// RENDERIZAÇÃO DA INTERFACE
-// =========================================================================
 
 function renderMechanicQueue() {
     const mechanicViewContainer = document.getElementById('mechanic-view');
@@ -235,7 +246,7 @@ function renderMechanicQueue() {
 
     myJobs.sort((a, b) => (a.timestamp?.seconds || 0) - (b.timestamp?.seconds || 0));
 
-    let mechanicViewHTML = `<h2 class="text-2xl font-semibold mb-6 text-gray-800 border-b pb-2">Minha Fila de Serviços (${myJobs.length})</h2>`;
+    let mechanicViewHTML = `<h2 class="text-2xl font-semibold mb-6 text-gray-800 border-b pb-2">Minha Fila (${myJobs.length})</h2>`;
 
     if (myJobs.length > 0) {
         mechanicViewHTML += `<ul class="space-y-3">`;
@@ -247,7 +258,7 @@ function renderMechanicQueue() {
 
             let descriptionHTML = '';
             if (!isDefined) {
-                descriptionHTML = '<p class="font-bold text-red-600">(Aguardando Definição de Serviço pela Gerência)</p>';
+                descriptionHTML = '<p class="font-bold text-red-600">(Aguardando Definição)</p>';
             } else {
                 const descriptionText = job.serviceDescription || 'N/A';
                 if (descriptionText.length > 25) {
@@ -274,7 +285,7 @@ function renderMechanicQueue() {
                     <div class="absolute top-4 right-4">
                         <button onclick="showServiceReadyConfirmation('${job.id}', 'GS')"
                                 class="text-sm font-medium bg-green-500 text-white py-2 px-4 rounded-lg hover:bg-green-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                                ${!isDefined ? 'disabled' : ''} title="${!isDefined ? 'Aguardando definição do serviço pela gerência' : 'Marcar como Pronto'}">
+                                ${!isDefined ? 'disabled' : ''} title="${!isDefined ? 'Aguardando definição' : 'Marcar como Pronto'}">
                             Pronto
                         </button>
                     </div>
@@ -288,17 +299,12 @@ function renderMechanicQueue() {
                 <svg class="mx-auto h-12 w-12 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
                 </svg>
-                <p class="text-lg font-medium text-gray-700 mt-4">Nenhum carro na sua fila no momento.</p>
-                <p class="text-gray-500">Aproveite para organizar a oficina!</p>
+                <p class="text-lg font-medium text-gray-700 mt-4">Sua fila está vazia.</p>
             </div>
         `;
     }
     mechanicViewContainer.innerHTML = mechanicViewHTML;
 }
-
-// =========================================================================
-// MODAIS ADICIONAIS E LISTENERS
-// =========================================================================
 
 window.showFullDescriptionModal = function(encodedText) {
     const text = unescape(encodedText);
@@ -315,26 +321,23 @@ function setupRealtimeListeners() {
 
     const serviceQuery = query(
         collection(db, SERVICE_COLLECTION_PATH),
-        where('status', '==', STATUS_PENDING) // Apenas serviços pendentes
+        where('status', '==', STATUS_PENDING)
     );
 
     onSnapshot(serviceQuery, (snapshot) => {
         serviceJobs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         renderMechanicQueue();
     }, (error) => {
-        console.error("Erro no listener de Serviços:", error);
-        document.getElementById('mechanic-view').innerHTML = `<p class="text-red-500">Erro de conexão: ${error.message}</p>`;
+        console.error("Erro listener Serviços:", error);
+        document.getElementById('mechanic-view').innerHTML = `<p class="text-red-500">Erro de conexão.</p>`;
     });
 }
 
 // =========================================================================
-// INICIALIZAÇÃO
+// INICIALIZAÇÃO FINAL & PWA
 // =========================================================================
 initializeAppAndAuth();
 
-// =========================================================================
-// LÓGICA DE INSTALAÇÃO DO PWA
-// =========================================================================
 let deferredPrompt;
 const installButton = document.getElementById('install-button');
 
@@ -342,7 +345,6 @@ window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
     deferredPrompt = e;
     if(installButton) installButton.classList.remove('hidden');
-    console.log('PWA está pronto para ser instalado.');
 });
 
 if(installButton) {
@@ -350,30 +352,17 @@ if(installButton) {
         if (!deferredPrompt) return;
         deferredPrompt.prompt();
         const { outcome } = await deferredPrompt.userChoice;
-        console.log(`Resultado da instalação: ${outcome}`);
         deferredPrompt = null;
         installButton.classList.add('hidden');
     });
 }
 
-// =========================================================================
-// SOM DE NOTIFICAÇÃO (FIX COMPLETO) - OUVINTE DO SERVICE WORKER
-// =========================================================================
+// Ouvinte de Som do Service Worker
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.addEventListener('message', (event) => {
-        // Ouve o comando enviado pelo Service Worker para tocar o som
-        console.log('🎵 Comando recebido do SW (Mecânico):', event.data);
-
         if (event.data && event.data.type === 'PLAY_SOUND') {
-            // Usa o áudio global que (esperamos) já foi desbloqueado pelo unlockAudio()
             notificationSound.currentTime = 0;
-            notificationSound.play()
-                .then(() => console.log("🔊 Som reproduzido com sucesso!"))
-                .catch(e => {
-                    console.warn("❌ Erro ao tocar som (Toque na tela para liberar):", e);
-                    // Fallback visual se o som falhar
-                    alert("Novo serviço atribuído!");
-                });
+            notificationSound.play().catch(e => console.warn("Toque na tela para liberar som:", e));
         }
     });
 }

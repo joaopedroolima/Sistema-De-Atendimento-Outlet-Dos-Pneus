@@ -1,11 +1,8 @@
-// =========================================================================
-// PUSH INTELIGENTE (SALVA NO FIRESTORE) - CORRIGIDO
-// =========================================================================
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import { getMessaging, getToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-messaging.js";
 import { getFirestore, doc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-// --- Configuração do Firebase (A mesma do script.js) ---
+// --- Configuração do Firebase ---
 const firebaseConfig = {
     apiKey: "AIzaSyDleQ5Y1-o7Uoo3zOXKIm35KljdxJuxvWo",
     authDomain: "banco-de-dados-outlet2-0.firebaseapp.com",
@@ -16,73 +13,72 @@ const firebaseConfig = {
     measurementId: "G-5SZ5F2WKXD"
 };
 
-// Inicializa o Firebase DENTRO deste arquivo para evitar o erro "No Firebase App"
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const messaging = getMessaging(app);
 
-// Sua chave VAPID
+// SUA CHAVE VAPID
 const VAPID_PUBLIC_KEY = 'BI4ETZDqademtj-ZFFq5f93hUKtLAuJGYt0DsfF12wg09DkmYVz5xwlg2gmC0qBGrtQBuUtcBBysIWaZIQjnur0'; 
 
-/**
- * Registra o dispositivo para receber notificações.
- * Agora aceita 'role' e 'username' para sabermos QUEM é o dono do dispositivo.
- */
 export async function registerForPushNotifications(role, username) {
-  console.log('🏁 INICIANDO REGISTRO PUSH...');
+  console.log(`🔧 [${username}] Iniciando processo de Push (${role})...`);
 
   if (!('serviceWorker' in navigator)) {
-    console.warn('❌ Service Worker não suportado neste navegador.');
-    return;
+      alert('Erro: Este navegador não suporta Service Workers.');
+      return;
   }
 
   try {
-    // 1. Pede permissão ao usuário
+    // 1. Aguarda o Service Worker estar PRONTO e ATIVO
+    const registration = await navigator.serviceWorker.ready;
+    console.log('✅ Service Worker detectado e pronto:', registration.scope);
+
+    // 2. Pede permissão (Isso vai funcionar porque foi chamado pelo clique no script.js)
     const permission = await Notification.requestPermission();
+    
     if (permission !== 'granted') {
-      console.warn('❌ Permissão de notificação negada.');
+      console.warn('Permissão negada pelo usuário.');
+      // Se o usuário negou, não mostramos alerta para não ser chato, 
+      // mas no console aparecerá o aviso.
       return;
     }
 
-    // 2. Aguarda o Service Worker estar pronto
-    const registration = await navigator.serviceWorker.ready;
-
-    // 3. Pede o Token ao Firebase usando sua chave VAPID
+    // 3. Tenta obter o Token
     const currentToken = await getToken(messaging, {
       vapidKey: VAPID_PUBLIC_KEY,
       serviceWorkerRegistration: registration
     });
 
     if (currentToken) {
-      // 4. Salva no banco de dados com as informações do usuário
+      console.log('Token gerado:', currentToken);
       await saveTokenToFirestore(currentToken, role, username);
-      
     } else {
-      console.log('⚠️ Nenhum token disponível. Tente limpar os dados do site.');
+      alert('Erro: O Firebase não retornou nenhum token. Verifique a VAPID Key.');
     }
 
   } catch (err) {
-    console.error('❌ Erro ao registrar notificações:', err);
+    console.error('❌ Erro fatal no Push:', err);
+    alert(`Erro Push: ${err.message}`);
   }
 }
 
-/**
- * Salva o token na coleção 'device_tokens' junto com o cargo e nome.
- */
 async function saveTokenToFirestore(token, role, username) {
   try {
     const tokenRef = doc(db, 'device_tokens', token);
     
     await setDoc(tokenRef, {
       token: token,
-      role: role,          
-      username: username,  
+      role: role,
+      username: username,
       updatedAt: serverTimestamp(),
-      platform: 'web'
+      platform: 'web_pwa',
+      userAgent: navigator.userAgent
     }, { merge: true });
 
-    console.log(`✅ Token vinculado a ${username} (${role}) no banco de dados.`);
+    console.log(`✅ Token salvo no banco para ${username}!`);
+    // alert(`Notificações ativas para ${username}!`); // Descomente se quiser ver a confirmação na tela
   } catch (e) {
-    console.error('❌ Erro ao salvar token no Firestore:', e);
+    console.error('❌ Erro ao salvar no Firestore:', e);
+    alert(`Erro ao salvar no banco: ${e.message}`);
   }
 }

@@ -90,7 +90,7 @@ async function handleLogin(e) {
             window.location.href = '../Operacional_system/operacional.html'; // CORREÇÃO: Caminho relativo
         } else if (ALLOWED_MARKETING_PROFILES.includes(user.role)) { // CORREÇÃO: Verifica primeiro o perfil de marketing
             await logAccessAttempt(user.id, user.role, true, 'marketing_interface');
-            window.location.href = '../marketing_interface/marketing.html'; // CORREÇÃO: Caminho relativo
+            window.location.href = '../Marketing_interface/marketing.html'; // CORREÇÃO: Caminho relativo
         } else if (ALLOWED_CLIENT_PROFILES.includes(user.role)) {
             await logAccessAttempt(user.id, user.role, true, 'Cliente_queue');
             await signInAnonymously(auth); // Garante permissão de leitura para a tela do cliente

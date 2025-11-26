@@ -218,12 +218,21 @@ function setupRealtimeListeners() {
 }
 
 function populateDropdowns() {
-    // Preenche dropdown de adicionar carro (apenas gerente/alinhador vê)
+    // Preenche dropdown de adicionar carro
     const vendedorSelect = document.getElementById('aliVendedorName');
+    
     if (vendedorSelect) {
+        // Preenche as opções
         vendedorSelect.innerHTML = `<option value="" disabled selected>Vendedor...</option>` + 
             vendedores.map(v => `<option value="${v.username}">${v.username}</option>`).join('');
+            
+        // --- A CORREÇÃO ESTÁ AQUI EMBAIXO ---
+        // Se a lista de vendedores foi carregada, habilita o campo
+        if (vendedores.length > 0) {
+            vendedorSelect.disabled = false;
+        }
     }
+
     // Preenche dropdown do modal de retrabalho
     const reworkMechanicSelect = document.getElementById('rework-mechanic-select');
     if (reworkMechanicSelect) {

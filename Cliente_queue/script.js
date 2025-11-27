@@ -421,29 +421,29 @@ function startAdCycle() {
 
 // Substitua a função showNextAd atual por esta:
 function showNextAd() {
-    // 1. Lógica de Fila Vazia (Atualização a cada 1 min)
+    // 1. Segurança: Limpa qualquer cronômetro anterior para evitar cortes bruscos
+    if (adCycleTimeout) {
+        clearTimeout(adCycleTimeout);
+        adCycleTimeout = null;
+    }
+
+    // 2. Verifica se a fila está vazia (Lógica de ping-pong mantida)
     if (!ads || ads.length === 0) {
-        console.log("Fila de anúncios vazia ou indefinida. Buscando atualizações...");
-        
+        console.log("Fila de anúncios vazia. Buscando atualizações...");
         fetchAds().then(() => {
             if (ads && ads.length > 0) {
-                // Se achou anúncios, começa o ciclo imediatamente (reseta índice)
                 currentAdIndex = 0;
                 startAdCycle(); 
             } else {
-                // Se AINDA estiver vazio, espera 1 minuto (60000ms) e tenta de novo
-                console.log("Nenhum anúncio encontrado. Nova verificação em 1 minuto.");
-                adCycleTimeout = setTimeout(showNextAd, 60000);
+                adCycleTimeout = setTimeout(showNextAd, 60000); // Tenta de novo em 1 min
             }
-        }).catch((e) => {
-            console.error("Erro ao buscar anúncios na espera:", e);
-            // Em caso de erro de rede, tenta em 1 minuto também
+        }).catch(() => {
             adCycleTimeout = setTimeout(showNextAd, 60000);
         });
         return;
     }
 
-    // 2. Proteção de Índice
+    // Proteção de Índice
     if (currentAdIndex >= ads.length) {
         currentAdIndex = 0;
     }
@@ -451,54 +451,58 @@ function showNextAd() {
     const ad = ads[currentAdIndex];
     currentAdIndex = (currentAdIndex + 1) % ads.length;
 
-    // Pausa o dashboard e prepara o container de anúncios
+    // Prepara a tela
     ScrollManager.pauseAll();
     queueContainer.classList.add('hidden');
-    
     adContainer.innerHTML = '';
     adContainer.classList.remove('hidden');
 
-    // 3. Exibição (Vídeo ou Imagem)
+    // --- LÓGICA DE VÍDEO RESTAURADA E MELHORADA ---
     if (ad.type === 'video') {
         const video = document.createElement('video');
         video.src = ad.url;
         video.autoplay = true;
-        video.muted = false; 
+        video.muted = false; // Tenta com som primeiro
         video.playsInline = true;
         
-        // Se o vídeo terminar, volta pro dashboard
+        // Só fecha quando o vídeo realmente terminar
         video.onended = () => {
+            console.log("Vídeo finalizado. Retornando ao dashboard.");
             hideAdAndResume();
         };
         
-        // Se der erro no vídeo, volta pro dashboard imediatamente
-        video.onerror = () => {
-            console.error("Erro ao reproduzir vídeo:", ad.url);
+        video.onerror = (e) => {
+            console.error("Erro no carregamento do vídeo:", e);
             hideAdAndResume();
         };
 
         adContainer.appendChild(video);
         
+        // Tenta dar play. Se o navegador bloquear o som, tenta tocar mudo.
         const playPromise = video.play();
         if (playPromise !== undefined) {
             playPromise.catch(error => {
-                console.error("Autoplay bloqueado ou falhou:", error);
-                // Se falhar o play, espera 5 segundos e pula
-                setTimeout(hideAdAndResume, 5000);
+                console.warn("Autoplay com som bloqueado. Tentando mudo...", error);
+                video.muted = true;
+                video.play().catch(e => {
+                    console.error("Autoplay falhou totalmente:", e);
+                    // Só aqui, se falhar tudo, pulamos o anúncio
+                    hideAdAndResume();
+                });
             });
         }
 
     } else {
-        // Lógica de Imagem
+        // --- LÓGICA DE IMAGEM ---
         const img = document.createElement('img');
         img.src = ad.url;
         
         img.onload = () => {
-            // Usa a duração da imagem (segundos * 1000) ou o global
+            // Garante a conversão correta de segundos para milissegundos
             const durationInSeconds = ad.duration ? parseInt(ad.duration, 10) : globalImageDuration;
             const displayTime = durationInSeconds * 1000;
             
-            console.log(`Exibindo imagem por ${displayTime}ms`);
+            // Define o tempo exato desta imagem
             adCycleTimeout = setTimeout(hideAdAndResume, displayTime);
         };
         

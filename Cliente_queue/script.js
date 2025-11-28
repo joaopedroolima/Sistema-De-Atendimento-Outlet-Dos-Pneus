@@ -27,6 +27,7 @@ const HIDDEN_ITEMS_COLLECTION_PATH = `/artifacts/${APP_ID}/public/data/hiddenIte
 const STATUS_PENDING = 'Pendente';
 const STATUS_READY = 'Pronto para Pagamento';
 const STATUS_GS_FINISHED = 'Serviço Geral Concluído';
+const STATUS_TS_FINISHED = 'Serviço Pneus Concluído';
 const STATUS_IN_PROGRESS = 'Em Andamento';
 const STATUS_WAITING_GS = 'Aguardando Serviço Geral';
 const STATUS_WAITING = 'Aguardando';
@@ -102,7 +103,7 @@ function setupRealtimeListeners() {
     onSnapshot(alignmentQuery, (snapshot) => {
         alignmentQueue = snapshot.docs
             .map(doc => ({ id: doc.id, ...doc.data() }))
-            .filter(car => [STATUS_WAITING, STATUS_ATTENDING, STATUS_WAITING_GS, STATUS_READY, STATUS_ALIGNMENT_FINISHED, 'Finalizado'].includes(car.status));
+            .filter(car => [STATUS_WAITING, STATUS_ATTENDING, STATUS_WAITING_GS, STATUS_READY].includes(car.status));
         renderDisplay();
     }, console.error);
 
@@ -127,7 +128,6 @@ function renderDisplay() {
     serviceJobs.forEach(job => {
         if (job.status === STATUS_READY) {
             readyItems.push({ plate: job.licensePlate, model: job.carModel || 'Veículo', id: job.id });
-            return;
         }
         if (job.status !== 'Finalizado' && job.status !== 'Pago') {
             const vehicle = getVehicle(job.licensePlate);
@@ -138,25 +138,25 @@ function renderDisplay() {
             
             const jobType = job.type || job.serviceType || '';
             if (jobType.includes('Serviço Geral') || job.statusGS) {
-                const isCompleted = [STATUS_GS_FINISHED, 'Concluído', 'Serviço Geral Concluído'].includes(job.statusGS) || job.status === STATUS_GS_FINISHED;
+                const isCompleted = [STATUS_GS_FINISHED, 'Concluído', 'Serviço Geral Concluído'].includes(job.statusGS) || job.status === STATUS_GS_FINISHED || job.status === STATUS_READY;
                 vehicle.services.general = { name: 'Mecânico', completed: isCompleted };
             }
             if (jobType.includes('Pneus') || job.statusTS) {
-                const isCompleted = ['Concluído', 'Serviço Pneus Concluído'].includes(job.statusTS);
+                const isCompleted = ['Concluído', 'Serviço Pneus Concluído', STATUS_TS_FINISHED].includes(job.statusTS) || vehicle.status === STATUS_READY;
                 vehicle.services.tires = { name: 'Borracheiro', completed: isCompleted };
             }
         }
     });
-
+    
     alignmentQueue.forEach(car => {
-        if (car.status === STATUS_READY) {
+        if (car.status === STATUS_READY && car.status !== STATUS_ALIGNMENT_FINISHED) {
             if (!readyItems.some(item => item.plate === car.licensePlate)) {
                 readyItems.push({ plate: car.licensePlate, model: car.carModel || 'Veículo', id: car.id });
             }
-            return;
         }
         const vehicle = getVehicle(car.licensePlate);
         vehicle.model = car.carModel || vehicle.model;
+        vehicle.status = car.status; // CORREÇÃO: Garante que o status do veículo consolidado seja atualizado.
         if (!vehicle.id) vehicle.id = car.id;
         
         const isAlignmentCompleted = [STATUS_READY, STATUS_ALIGNMENT_FINISHED, 'Pronto para Pagamento', 'Finalizado'].includes(car.status);
@@ -177,6 +177,11 @@ function renderDisplay() {
     });
 
     const displayItems = Array.from(vehicleData.values()).filter(vehicle => {
+        // Se o status geral do veículo já é "Pronto para Pagamento",
+        // ele não deve mais aparecer na lista de "Serviços em Andamento".
+        if (vehicle.status === STATUS_READY) {
+            return false;
+        }
         const serviceStatuses = Object.values(vehicle.services);
         return serviceStatuses.length > 0 && serviceStatuses.some(service => !service.completed);
     });

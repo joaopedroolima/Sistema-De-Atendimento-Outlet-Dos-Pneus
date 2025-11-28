@@ -845,13 +845,13 @@ window.showServiceReadyConfirmation = function(docId, serviceType) {
 }
 
 window.showAlignmentReadyConfirmation = function(docId) {
-    if (currentUserRole !== MANAGER_ROLE && currentUserRole !== ALIGNER_ROLE) return alertUser("Acesso negado. Faça login como Alinhador ou Gerente.");
+    if (currentUserRole !== MANAGER_ROLE && currentUserRole !== ALIGNER_ROLE && currentUserRole !== VENDEDOR_ROLE) return alertUser("Acesso negado. Faça login como Alinhador, Vendedor ou Gerente.");
 
      showConfirmationModal(docId, 'alignment', 'Confirmar Alinhamento Concluído', 'Tem certeza de que o **Alinhamento** está PRONTO e deve ser enviado para a Gerência?', 'alignment');
 }
 
 window.showFinalizeConfirmation = function(docId, collectionType) { // CORREÇÃO: Permite que Alinhadores também finalizem
-    if (currentUserRole !== MANAGER_ROLE && currentUserRole !== ALIGNER_ROLE) return alertUser("Acesso negado. Apenas Gerentes ou Alinhadores podem finalizar pagamentos.");
+    if (currentUserRole !== MANAGER_ROLE && currentUserRole !== ALIGNER_ROLE && currentUserRole !== VENDEDOR_ROLE) return alertUser("Acesso negado. Apenas Gerentes, Vendedores ou Alinhadores podem finalizar pagamentos.");
 
     const title = collectionType === 'service' ? 'Finalizar Pagamento (Mecânica)' : 'Finalizar Pagamento (Alinhamento)';
     const message = `Confirma a finalização e recebimento do pagamento para o serviço de **${collectionType === 'service' ? 'Mecânica' : 'Alinhamento'}**? Esta ação marcará o carro como 'Finalizado'.`;
@@ -861,7 +861,7 @@ window.showFinalizeConfirmation = function(docId, collectionType) { // CORREÇÃ
 
 // NOVO: Modal para confirmar o envio do alinhamento para o gerente (pronto para pagamento)
 window.showSendToManagerConfirmation = function(docId) {
-    if (currentUserRole !== MANAGER_ROLE && currentUserRole !== ALIGNER_ROLE) return alertUser("Acesso negado.");
+    if (currentUserRole !== MANAGER_ROLE && currentUserRole !== ALIGNER_ROLE && currentUserRole !== VENDEDOR_ROLE) return alertUser("Acesso negado.");
 
     const title = 'Enviar para Gerência';
     const message = `Tem certeza de que o serviço de alinhamento está concluído e deve ser enviado para a fila de pagamento do gerente?`;
@@ -881,7 +881,7 @@ window.showMarkAsLostConfirmation = function(docId) {
 
 // NOVO: Modal de confirmação para descartar item do alinhamento
 window.showDiscardAlignmentConfirmation = function(docId) {
-    if (currentUserRole !== MANAGER_ROLE && currentUserRole !== ALIGNER_ROLE) return alertUser("Acesso negado.");
+    if (currentUserRole !== MANAGER_ROLE && currentUserRole !== ALIGNER_ROLE && currentUserRole !== VENDEDOR_ROLE) return alertUser("Acesso negado.");
 
     const car = alignmentQueue.find(c => c.id === docId);
     if (!car) return;
@@ -1052,7 +1052,7 @@ function createReworkModal() {
 }
 
 window.showReturnToMechanicModal = function(docId) {
-    if (currentUserRole !== MANAGER_ROLE && currentUserRole !== ALIGNER_ROLE) return alertUser("Acesso negado.");
+    if (currentUserRole !== MANAGER_ROLE && currentUserRole !== ALIGNER_ROLE && currentUserRole !== VENDEDOR_ROLE) return alertUser("Acesso negado.");
 
     const car = alignmentQueue.find(c => c.id === docId);
     if (!car) return alertUser("Erro: Carro não encontrado na fila de alinhamento.");
@@ -1637,7 +1637,7 @@ async function markServiceAsLost(docId) {
 }
 
 async function updateAlignmentStatus(docId, newStatus) {
-    if (currentUserRole !== MANAGER_ROLE && currentUserRole !== ALIGNER_ROLE) return alertUser("Acesso negado. Faça login como Alinhador ou Gerente.");
+    if (currentUserRole !== MANAGER_ROLE && currentUserRole !== ALIGNER_ROLE && currentUserRole !== VENDEDOR_ROLE) return alertUser("Acesso negado. Faça login como Alinhador, Vendedor ou Gerente.");
 
     let finalStatus = newStatus;
     let dataToUpdate = {};
@@ -1686,7 +1686,7 @@ async function updateAlignmentStatus(docId, newStatus) {
 
 // NOVO: Marca um job de alinhamento como perdido
 async function discardAlignmentJob(docId) {
-    if (currentUserRole !== MANAGER_ROLE && currentUserRole !== ALIGNER_ROLE) return alertUser("Acesso negado.");
+    if (currentUserRole !== MANAGER_ROLE && currentUserRole !== ALIGNER_ROLE && currentUserRole !== VENDEDOR_ROLE) return alertUser("Acesso negado.");
 
     const dataToUpdate = {
         status: STATUS_LOST,
@@ -2208,8 +2208,9 @@ function renderAlignmentQueue(cars) {
         let actions;
 
         // Ações disponíveis para Alinhador ou Gerente
-        const canTakeAction = currentUserRole === ALIGNER_ROLE || currentUserRole === MANAGER_ROLE;
+        const canTakeAction = currentUserRole === ALIGNER_ROLE || currentUserRole === MANAGER_ROLE || currentUserRole === VENDEDOR_ROLE;
         const isManager = currentUserRole === MANAGER_ROLE;
+        const canReturnOrDiscard = isManager || currentUserRole === VENDEDOR_ROLE;
 
         if (isAttending) {
              actions = `
@@ -2217,7 +2218,7 @@ function renderAlignmentQueue(cars) {
                     ${isManager ? `
                         <button onclick="showReturnToMechanicModal('${car.id}')" title="Retornar ao Mecânico" class="p-2 text-blue-600 hover:bg-blue-100 rounded-full transition">${returnIcon}</button>
                         <button onclick="showDiscardAlignmentConfirmation('${car.id}')" title="Descartar / Perdido" class="p-1 text-red-600 hover:bg-red-100 rounded-full transition">${discardIcon}</button>
-                    ` : ''}
+                    ` : (canReturnOrDiscard ? `<button onclick="showReturnToMechanicModal('${car.id}')" title="Retornar ao Mecânico" class="p-2 text-blue-600 hover:bg-blue-100 rounded-full transition">${returnIcon}</button><button onclick="showDiscardAlignmentConfirmation('${car.id}')" title="Descartar / Perdido" class="p-1 text-red-600 hover:bg-red-100 rounded-full transition">${discardIcon}</button>` : '')}
                      <button onclick="showAlignmentReadyConfirmation('${car.id}')"
                          class="text-xs font-medium bg-green-500 text-white py-1 px-3 rounded-md hover:bg-green-600 transition"
                          ${!canTakeAction ? 'disabled' : ''}>
@@ -2228,7 +2229,7 @@ function renderAlignmentQueue(cars) {
         } else if (isNextWaiting) {
             actions = `
                 <div class="flex items-center space-x-2 justify-end">
-                    ${isManager ? `
+                    ${canReturnOrDiscard ? `
                         <button onclick="showReturnToMechanicModal('${car.id}')" title="Retornar ao Mecânico" class="p-2 text-blue-600 hover:bg-blue-100 rounded-full transition" ${!car.serviceJobId ? 'disabled title="Ação não permitida para adição manual"' : ''}>${returnIcon}</button>
                         <button onclick="showDiscardAlignmentConfirmation('${car.id}')" title="Descartar / Perdido" class="p-1 text-red-600 hover:bg-red-100 rounded-full transition">${discardIcon}</button>
                     ` : ''}
@@ -2243,7 +2244,7 @@ function renderAlignmentQueue(cars) {
             // Para os outros carros na fila, também permite descartar ou retornar, se tiverem permissão.
             actions = `
                 <div class="flex items-center space-x-2 justify-end">
-                    ${isManager ? `
+                    ${canReturnOrDiscard ? `
                         <button onclick="showReturnToMechanicModal('${car.id}')" title="Retornar ao Mecânico" class="p-2 text-blue-600 hover:bg-blue-100 rounded-full transition" ${!car.serviceJobId ? 'disabled title="Ação não permitida para adição manual"' : ''}>${returnIcon}</button>
                         <button onclick="showDiscardAlignmentConfirmation('${car.id}')" title="Descartar / Perdido" class="p-1 text-red-600 hover:bg-red-100 rounded-full transition">${discardIcon}</button>
                     ` : ''}

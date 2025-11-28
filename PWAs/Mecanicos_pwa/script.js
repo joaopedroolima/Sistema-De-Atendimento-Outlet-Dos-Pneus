@@ -1,8 +1,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-import { getFirestore, doc, updateDoc, onSnapshot, collection, query, where, getDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+// ADICIONADO: 'getDocs' para buscar na coleção de alinhamento
+import { getFirestore, doc, updateDoc, onSnapshot, collection, query, where, getDoc, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-// Importação CORRETA da função de push blindada
 import { registerForPushNotifications } from './push.js';
 
 // =========================================================================
@@ -35,39 +35,24 @@ if (isCanvasEnvironment && typeof __firebase_config !== 'undefined') {
 }
 
 // =========================================================================
-// ÁUDIO E NOTIFICAÇÕES (FIX ANDROID)
+// ÁUDIO (Lógica Simples Restaurada - Apenas destrava o som)
 // =========================================================================
 const notificationSound = new Audio('sounds/notify.mp3');
-let interactionUnlocked = false;
 
-// Função chamada no primeiro clique para liberar áudio e pedir notificação
-async function unlockFeatures() {
-    if (interactionUnlocked) return;
-    interactionUnlocked = true;
-
-    // 1. Desbloqueia Áudio (toca mudo rapidinho)
+// Função simples apenas para permitir áudio no Android/iOS no primeiro clique
+function unlockAudioContext() {
     notificationSound.volume = 0.1;
     notificationSound.play().then(() => {
         notificationSound.pause();
         notificationSound.currentTime = 0;
         notificationSound.volume = 1.0;
-        console.log("🔊 Áudio desbloqueado no Android.");
-    }).catch(e => console.warn("Ainda não foi possível desbloquear o áudio:", e));
-
-    // 2. Tenta Registrar Push Notifications (Agora permitido pois é um evento de clique)
-    if (currentUserRole && currentUserName) {
-        console.log("📲 Tentando registrar Push após interação do usuário...");
-        registerForPushNotifications(currentUserRole, currentUserName);
-    }
-
-    // Remove os ouvintes para não rodar de novo
-    document.body.removeEventListener('click', unlockFeatures);
-    document.body.removeEventListener('touchstart', unlockFeatures);
+    }).catch(e => {});
+    document.body.removeEventListener('click', unlockAudioContext);
+    document.body.removeEventListener('touchstart', unlockAudioContext);
 }
 
-// Adiciona os ouvintes globais
-document.body.addEventListener('click', unlockFeatures);
-document.body.addEventListener('touchstart', unlockFeatures);
+document.body.addEventListener('click', unlockAudioContext);
+document.body.addEventListener('touchstart', unlockAudioContext);
 
 // =========================================================================
 // INICIALIZAÇÃO E AUTENTICAÇÃO
@@ -88,7 +73,6 @@ function postLoginSetup(user) {
     currentUserRole = user.role;
     currentUserName = user.username;
 
-    // Verifica se é Mecânico
     if (currentUserRole !== MECANICO_ROLE) {
         document.body.innerHTML = `<div class="w-screen h-screen flex items-center justify-center bg-red-100 text-red-800 p-8">
             <div class="text-center">
@@ -105,12 +89,8 @@ function postLoginSetup(user) {
 
     setupRealtimeListeners();
 
-    // Se já tiver permissão garantida, tenta registrar direto.
-    if (Notification.permission === 'granted') {
-        registerForPushNotifications(user.role, user.username);
-    } else {
-        console.log("⚠️ Aguardando clique para pedir notificação no Android.");
-    }
+    // RESTAURADO: Push é chamado automaticamente ao logar, sem depender de clique
+    registerForPushNotifications(user.role, user.username);
 }
 
 window.handleLogout = function() {
@@ -121,14 +101,12 @@ window.handleLogout = function() {
 }
 
 function initializeAppAndAuth() {
-    // 1. Registra SW imediatamente
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('./service-worker.js', { scope: './' })
             .then(reg => console.log("✅ SW registrado:", reg.scope))
             .catch(err => console.error("❌ Erro SW:", err));
     }
 
-    // 2. Verifica Login Local
     const savedUser = localStorage.getItem('currentUser');
     if (!savedUser) {
         window.location.replace('auth.html');
@@ -137,7 +115,6 @@ function initializeAppAndAuth() {
 
     try {
         const user = JSON.parse(savedUser);
-        // 3. Login Anônimo
         signInAnonymously(auth).then(() => {
             isAuthReady = true;
             console.log("Autenticação anônima OK.");
@@ -161,11 +138,19 @@ let currentJobToConfirm = { id: null, type: null, confirmAction: null, serviceTy
 
 const SERVICE_COLLECTION_PATH = `/artifacts/${appId}/public/data/serviceJobs`;
 
+// --- ADICIONADO: Constantes necessárias para o Alinhamento ---
+const ALIGNMENT_COLLECTION_PATH = `/artifacts/${appId}/public/data/alignmentQueue`;
+const STATUS_WAITING = 'Aguardando'; 
+const STATUS_FINALIZED = 'Finalizado';
+const STATUS_LOST = 'Perdido';
+// -------------------------------------------------------------
+
 const STATUS_PENDING = 'Pendente';
 const STATUS_READY = 'Pronto para Pagamento';
 const STATUS_GS_FINISHED = 'Serviço Geral Concluído';
 const STATUS_TS_FINISHED = 'Serviço Pneus Concluído';
 
+// --- FUNÇÃO DE PRONTO CORRIGIDA ---
 async function markServiceReady(docId, serviceType) {
     if (serviceType !== 'GS') return;
 
@@ -176,20 +161,57 @@ async function markServiceReady(docId, serviceType) {
 
     try {
         const serviceDocRef = doc(db, SERVICE_COLLECTION_PATH, docId);
+        
+        // 1. Marca Mecânica como concluída
         await updateDoc(serviceDocRef, dataToUpdate);
 
+        // 2. Busca dados atualizados para decidir o próximo passo
         const serviceDoc = await getDoc(serviceDocRef);
         if (!serviceDoc.exists()) throw new Error("Documento não encontrado.");
 
         const job = serviceDoc.data();
         const isGsReady = job.statusGS === STATUS_GS_FINISHED;
-        const isTsReady = job.statusTS === STATUS_TS_FINISHED || job.statusTS === null;
+        const isTsReady = job.statusTS === STATUS_TS_FINISHED || job.statusTS === null; // Null significa que não tem pneu
 
-        if (isGsReady && isTsReady && !job.requiresAlignment) {
-            await updateDoc(serviceDocRef, { status: STATUS_READY });
+        // Se ambos (Mecânica e Pneus) acabaram
+        if (isGsReady && isTsReady) {
+            
+            if (job.requiresAlignment) {
+                // --- LÓGICA DE ALINHAMENTO ---
+                // Busca o ticket de alinhamento vinculado pelo ID do serviço
+                const alignQuery = query(
+                    collection(db, ALIGNMENT_COLLECTION_PATH),
+                    where('serviceJobId', '==', docId)
+                );
+                
+                const alignSnapshot = await getDocs(alignQuery);
+
+                if (!alignSnapshot.empty) {
+                    const alignDocSnapshot = alignSnapshot.docs[0];
+                    const alignData = alignDocSnapshot.data();
+
+                    // Só libera se não estiver finalizado ou perdido (segurança)
+                    if (alignData.status !== STATUS_FINALIZED && alignData.status !== STATUS_LOST && alignData.status !== STATUS_READY) {
+                        // MUDA O STATUS DO ALINHAMENTO PARA 'AGUARDANDO' (Disponível na tela do Alinhador)
+                        await updateDoc(alignDocSnapshot.ref, { status: STATUS_WAITING });
+                        console.log("Alinhamento liberado com sucesso.");
+                    }
+                    
+                    // Mantém o serviço principal como 'Serviço Geral Concluído' (Não libera pagamento ainda)
+                    await updateDoc(serviceDocRef, { status: STATUS_GS_FINISHED });
+                } else {
+                    // Fallback: Se deveria ter alinhamento mas não achou o doc, finaliza para não travar
+                    console.warn("Alinhamento não encontrado. Finalizando serviço.");
+                    await updateDoc(serviceDocRef, { status: STATUS_READY });
+                }
+
+            } else {
+                // --- NÃO REQUER ALINHAMENTO ---
+                // Libera direto para Pagamento
+                await updateDoc(serviceDocRef, { status: STATUS_READY });
+            }
         }
-        // Recarrega página para garantir atualização visual
-        // window.location.reload(); // Opcional, o listener deve cuidar disso
+        
     } catch (error) {
         console.error("Erro ao marcar pronto:", error);
         alert(`Erro: ${error.message}`);
@@ -200,7 +222,6 @@ async function markServiceReady(docId, serviceType) {
 // INTERFACE E MODAIS
 // =========================================================================
 
-// Listener do Botão "Sim, Confirmar"
 const confirmBtn = document.getElementById("confirm-button");
 if (confirmBtn) {
     confirmBtn.addEventListener("click", () => {
@@ -357,7 +378,6 @@ if(installButton) {
     });
 }
 
-// Ouvinte de Som do Service Worker
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.addEventListener('message', (event) => {
         if (event.data && event.data.type === 'PLAY_SOUND') {

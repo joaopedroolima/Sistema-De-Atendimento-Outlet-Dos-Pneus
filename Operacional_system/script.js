@@ -1428,9 +1428,9 @@ window.startGeneralService = startGeneralService;
 // =========================================================================
 
 async function markServiceReady(docId, serviceType) {
-
     let dataToUpdate = {};
-    // ATUALIZADO: Adiciona timestamp de conclusão da etapa
+    
+    // Configura os timestamps e status baseados no tipo de serviço (GS ou TS)
     if (serviceType === 'GS') {
         dataToUpdate.statusGS = STATUS_GS_FINISHED;
         dataToUpdate.gsFinishedAt = isDemoMode ? Timestamp.fromMillis(Date.now()) : serverTimestamp();
@@ -1439,14 +1439,14 @@ async function markServiceReady(docId, serviceType) {
         dataToUpdate.tsFinishedAt = isDemoMode ? Timestamp.fromMillis(Date.now()) : serverTimestamp();
     }
 
-
+    // --- BLOCO MODO DEMO ---
     if (isDemoMode) {
         const jobIndex = serviceJobs.findIndex(j => j.id === docId);
         if (jobIndex === -1) {
             alertUser("Erro Demo: Serviço geral não encontrado.");
             return;
         }
-        // Aplica a atualização de status
+        // Aplica a atualização de status localmente
         serviceJobs[jobIndex] = { ...serviceJobs[jobIndex], ...dataToUpdate };
         const job = serviceJobs[jobIndex];
 
@@ -1455,14 +1455,19 @@ async function markServiceReady(docId, serviceType) {
 
         if (isGsReady && isTsReady) {
             if (job.requiresAlignment) {
+                // Busca o alinhamento vinculado pelo ID
                 const alignmentCarIndex = alignmentQueue.findIndex(a => a.serviceJobId === docId);
-                if (alignmentCarIndex !== -1 && alignmentQueue[alignmentCarIndex].status === STATUS_WAITING_GS) {
+                
+                if (alignmentCarIndex !== -1) {
+                    // Libera para alinhamento (Muda de Aguardando GS -> Aguardando/Disponível)
                     alignmentQueue[alignmentCarIndex].status = STATUS_WAITING;
-                    job.status = STATUS_GS_FINISHED;
+                    job.status = STATUS_GS_FINISHED; // Mantém status interno até alinhar
                 } else {
+                    // Se não achar alinhamento, libera direto
                     job.status = STATUS_READY;
                 }
             } else {
+                // Se não tem alinhamento, libera para pagamento
                 job.status = STATUS_READY;
             }
         }
@@ -1474,6 +1479,7 @@ async function markServiceReady(docId, serviceType) {
         return;
     }
 
+    // --- BLOCO FIRESTORE (REAL) ---
     try {
         const serviceDocRef = doc(db, SERVICE_COLLECTION_PATH, docId);
         await updateDoc(serviceDocRef, dataToUpdate); // Salva o status (GS ou TS) e o timestamp
@@ -1485,43 +1491,54 @@ async function markServiceReady(docId, serviceType) {
         const isGsReady = job.statusGS === STATUS_GS_FINISHED;
         const isTsReady = job.statusTS === STATUS_TS_FINISHED || job.statusTS === null;
 
-        // CORREÇÃO: Lógica para retrabalho que precisa voltar ao alinhamento
+        // 1. Lógica Especial: Retrabalho (Volta do Alinhamento para Mecânica e depois volta para Alinhamento)
         if (job.statusGS === STATUS_GS_FINISHED && job.requiresAlignmentAfterRework) {
-            // Busca o job de alinhamento associado, que foi marcado como 'Perdido' anteriormente.
             const alignQuery = query(
                 collection(db, ALIGNMENT_COLLECTION_PATH), where('serviceJobId', '==', docId)
             );
             const alignSnapshot = await getDocs(alignQuery);
             if (!alignSnapshot.empty) {
                 const alignDocRef = alignSnapshot.docs[0].ref;
-                // Reativa o job de alinhamento, colocando-o de volta na fila de espera, e reseta o serviço geral
-                // para indicar que agora aguarda o alinhamento ser concluído.
+                // Reativa o job de alinhamento
                 await Promise.all([
                     updateDoc(alignDocRef, { status: STATUS_WAITING, timestamp: serverTimestamp(), readyAt: null, finalizedAt: null }),
                     updateDoc(serviceDocRef, { status: STATUS_GS_FINISHED, requiresAlignmentAfterRework: false })
                 ]);
-                return; // Encerra a função aqui, pois o fluxo é diferente.
+                return; 
             }
         }
 
-
+        // 2. Lógica Padrão: Verifica se tudo acabou para liberar o próximo passo
         if (isGsReady && isTsReady) {
             if (job.requiresAlignment) {
+                // CORREÇÃO APLICADA AQUI:
+                // Removemos o filtro de status. Buscamos APENAS pelo vínculo do ID.
                 const alignQuery = query(
                     collection(db, ALIGNMENT_COLLECTION_PATH),
-                    where('serviceJobId', '==', docId),
-                    where('status', '==', STATUS_WAITING_GS)
+                    where('serviceJobId', '==', docId)
                 );
                 const alignSnapshot = await getDocs(alignQuery);
 
                 if (!alignSnapshot.empty) {
-                    const alignDocRef = alignSnapshot.docs[0].ref;
-                    await updateDoc(alignDocRef, { status: STATUS_WAITING });
+                    const alignDoc = alignSnapshot.docs[0];
+                    const alignData = alignDoc.data();
+                    const alignDocRef = alignDoc.ref;
+
+                    // Só atualiza para "Disponível" se o alinhamento não estiver já finalizado ou perdido
+                    // isso evita bugs se alguém clicar em "Pronto" múltiplas vezes na mecânica.
+                    if (alignData.status !== STATUS_FINALIZED && alignData.status !== STATUS_LOST && alignData.status !== STATUS_READY) {
+                        await updateDoc(alignDocRef, { status: STATUS_WAITING });
+                    }
+                    
+                    // Mantém o serviço geral como "GS Finished" (ainda não pronto para pagamento, pois falta alinhar)
                     await updateDoc(serviceDocRef, { status: STATUS_GS_FINISHED });
                 } else {
+                    // Fallback: Se deveria ter alinhamento mas não achou o doc, libera para pagamento para não travar.
+                    console.warn("Alinhamento não encontrado para o serviço " + docId + ". Liberando para pagamento.");
                     await updateDoc(serviceDocRef, { status: STATUS_READY });
                 }
             } else {
+                // Se não tem alinhamento, vai direto para "Pronto para Pagamento"
                 await updateDoc(serviceDocRef, { status: STATUS_READY });
             }
         }

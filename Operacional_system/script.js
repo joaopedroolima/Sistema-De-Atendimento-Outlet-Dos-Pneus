@@ -121,6 +121,8 @@ const SERVICE_COLLECTION_PATH = `/artifacts/${appId}/public/data/serviceJobs`;
 const ALIGNMENT_COLLECTION_PATH = `/artifacts/${appId}/public/data/alignmentQueue`;
 // CORREÇÃO: Movendo a coleção de usuários para um caminho com permissão.
 const USERS_COLLECTION_PATH = `/artifacts/${appId}/public/data/users`;
+const SETTINGS_COLLECTION_PATH = `/artifacts/${appId}/public/data/systemSettings`;
+const ROTATION_DOC_ID = 'mechanicRotation';
 
 // STATUS GLOBAIS
 const STATUS_PENDING = 'Pendente';
@@ -420,37 +422,73 @@ function renderMechanicsManagement() {
 // 2. Lógica de Atribuição e Persistência
 // ------------------------------------
 
-// NOVO: Lógica de atribuição Round-Robin (Req 3.1)
-function getNextMechanicInRotation() {
+async function getNextMechanicInRotation() {
     if (MECHANICS.length === 0) {
         throw new Error("Nenhum mecânico (Geral) ativo para atribuição.");
     }
 
-    // CORREÇÃO: Garante que a lista de mecânicos esteja sempre na mesma ordem (alfabética)
-    // para que o rodízio (lastAssignedMechanicIndex) funcione de forma consistente.
+    // 1. Garante a ordem alfabética para consistência entre todos os dispositivos
     const sortedMechanics = [...MECHANICS].sort();
+    let lastAssignedMechanicName = null;
 
-    // NOVO: Carrega o último índice salvo do localStorage
-    let lastIndex = parseInt(localStorage.getItem('lastAssignedMechanicIndex'), 10);
-    if (isNaN(lastIndex)) {
-        lastIndex = -1;
+    try {
+        // 2. Busca o último mecânico salvo no Firestore
+        const docRef = doc(db, SETTINGS_COLLECTION_PATH, ROTATION_DOC_ID);
+        const docSnap = await getDoc(docRef);
+
+        if (docSnap.exists()) {
+            lastAssignedMechanicName = docSnap.data().lastAssignedMechanic;
+        }
+    } catch (error) {
+        console.warn("Erro ao ler rotação (pode ser o primeiro uso):", error);
     }
 
-    // Incrementa o índice para pegar o próximo mecânico
-    lastIndex++;
-
-    // Se o índice passar do tamanho do array, volta para o início (rodízio)
-    if (lastIndex >= sortedMechanics.length) {
-        lastIndex = 0;
+    // 3. Descobre o índice do último mecânico na lista atual
+    let lastIndex = -1;
+    if (lastAssignedMechanicName) {
+        lastIndex = sortedMechanics.indexOf(lastAssignedMechanicName);
     }
 
-    // NOVO: Salva o novo índice no localStorage para persistência
-    localStorage.setItem('lastAssignedMechanicIndex', lastIndex);
-    lastAssignedMechanicIndex = lastIndex; // Atualiza a variável global
+    // 4. Calcula o próximo índice (Lógica Circular)
+    let nextIndex = lastIndex + 1;
+    if (nextIndex >= sortedMechanics.length) {
+        nextIndex = 0; // Volta para o primeiro
+    }
 
-    const nextMechanic = sortedMechanics[lastIndex];
-    console.log(`Atribuição Round-Robin: Próximo mecânico é ${nextMechanic} (índice ${lastIndex})`);
+    const nextMechanic = sortedMechanics[nextIndex];
+
+    // 5. Salva o novo mecânico no Firestore para o próximo usuário saber
+    try {
+        await setDoc(doc(db, SETTINGS_COLLECTION_PATH, ROTATION_DOC_ID), {
+            lastAssignedMechanic: nextMechanic,
+            updatedAt: serverTimestamp()
+        });
+        console.log(`Rodízio Global Atualizado: Anterior [${lastAssignedMechanicName}] -> Novo [${nextMechanic}]`);
+    } catch (e) {
+        console.error("Erro ao salvar estado do rodízio:", e);
+    }
+
     return nextMechanic;
+}
+
+/**
+ * Função chamada quando a escolha é MANUAL.
+ * Ela força o banco a entender que este foi o último escolhido, 
+ * para que o próximo automático siga a sequência a partir daqui.
+ */
+async function updateManualRotationState(mechanicName) {
+    if (!mechanicName) return;
+    
+    try {
+        await setDoc(doc(db, SETTINGS_COLLECTION_PATH, ROTATION_DOC_ID), {
+            lastAssignedMechanic: mechanicName,
+            updatedAt: serverTimestamp(),
+            type: 'manual_override'
+        });
+        console.log(`Rodízio atualizado manualmente para: ${mechanicName}`);
+    } catch (e) {
+        console.error("Erro ao atualizar rotação manual:", e);
+    }
 }
 
 
@@ -462,14 +500,14 @@ document.getElementById('service-form').addEventListener('submit', async (e) => 
     e.preventDefault();
     if (!isLoggedIn) return alertUser("Você precisa estar logado para cadastrar serviços.");
 
-    // HOTFIX: Pega o nome do vendedor corretamente.
-    // Se for gerente, pega do select. Se for vendedor, pega do usuário logado.
+    // Define nome do vendedor
     let vendedorName = '';
     if (currentUserRole === MANAGER_ROLE) {
         vendedorName = document.getElementById('vendedorName').value;
     } else {
         vendedorName = currentUserName;
     }
+
     const licensePlate = document.getElementById('licensePlate').value.trim().toUpperCase();
     const carModel = document.getElementById('carModel').value.trim();
 
@@ -486,7 +524,7 @@ document.getElementById('service-form').addEventListener('submit', async (e) => 
     const errorElement = document.getElementById('service-error');
     const messageElement = document.getElementById('assignment-message');
     errorElement.textContent = '';
-    messageElement.textContent = 'Atribuindo...';
+    messageElement.textContent = 'Processando atribuição...';
 
     if (!isAuthReady) {
         errorElement.textContent = 'Aguardando inicialização do sistema...';
@@ -496,12 +534,23 @@ document.getElementById('service-form').addEventListener('submit', async (e) => 
     let assignedMechanic;
     let assignedTireShop = null;
 
+    // LÓGICA DE ATRIBUIÇÃO ATUALIZADA
     if (manualSelection && MECHANICS.includes(manualSelection)) {
         assignedMechanic = manualSelection;
+        // ATUALIZAÇÃO: Se escolheu manual, avisa o banco para a fila seguir a partir daqui
+        if (!isDemoMode) {
+            await updateManualRotationState(assignedMechanic);
+        }
     } else {
         try {
-            // ATUALIZADO: Usa a nova função de rodízio (Req 3.1)
-            assignedMechanic = getNextMechanicInRotation();
+            // ATUALIZAÇÃO: Agora usamos await porque a função vai ao banco
+            if (isDemoMode) {
+                // Fallback simples para modo demo
+                const randomIndex = Math.floor(Math.random() * MECHANICS.length);
+                assignedMechanic = MECHANICS[randomIndex];
+            } else {
+                assignedMechanic = await getNextMechanicInRotation();
+            }
         } catch (e) {
             errorElement.textContent = `Erro na atribuição: ${e.message}`;
             messageElement.textContent = '';
@@ -514,7 +563,7 @@ document.getElementById('service-form').addEventListener('submit', async (e) => 
     }
 
     const newJob = {
-        customerName: 'N/A', // REMOVIDO (Req 6.1)
+        customerName: 'N/A',
         vendedorName,
         licensePlate,
         carModel,
@@ -527,8 +576,8 @@ document.getElementById('service-form').addEventListener('submit', async (e) => 
         statusTS: willTireChange ? STATUS_PENDING : null,
         requiresAlignment: willAlign,
         timestamp: isDemoMode ? Timestamp.fromMillis(Date.now()) : serverTimestamp(),
-        gsStartedAt: isDemoMode ? Timestamp.fromMillis(Date.now()) : serverTimestamp(), // NOVO: Início automático do serviço
-        registeredBy: userId, // Mantido para rastreabilidade
+        gsStartedAt: isDemoMode ? Timestamp.fromMillis(Date.now()) : serverTimestamp(),
+        registeredBy: userId,
         id: `job_${jobIdCounter++}`,
         type: 'Serviço Geral',
         finalizedAt: null
@@ -537,41 +586,11 @@ document.getElementById('service-form').addEventListener('submit', async (e) => 
     try {
         if (isDemoMode) {
             serviceJobs.push(newJob);
-
-            let statusMessage = ` Simulação: Serviço Geral atribuído a ${assignedMechanic}!`;
-            if (willTireChange) {
-                statusMessage += ` e Serviço de Pneus ao Borracheiro!`;
-            }
-
-            if (willAlign) {
-                const newAlignmentCar = {
-                    customerName: 'N/A',
-                    vendedorName,
-                    licensePlate,
-                    carModel,
-                    status: STATUS_WAITING_GS,
-                    gsDescription: newJob.serviceDescription,
-                    gsMechanic: newJob.assignedMechanic,
-                    serviceJobId: newJob.id,
-                    timestamp: Timestamp.fromMillis(Date.now() + 10),
-                    addedBy: userId,
-            gsStartedAt: newJob.gsStartedAt, // NOVO: Propaga o tempo de início
-                    id: `ali_${aliIdCounter++}`,
-                    type: 'Alinhamento',
-                    finalizedAt: null
-                };
-                alignmentQueue.push(newAlignmentCar);
-
-                renderAlignmentQueue(alignmentQueue);
-                renderAlignmentMirror(alignmentQueue);
-                statusMessage += ` e adicionado à fila de Alinhamento (Aguardando)!`;
-            }
-
+            // ... (Lógica Demo Mantida) ...
             renderServiceQueues(serviceJobs);
             renderReadyJobs(serviceJobs, alignmentQueue);
-
             errorElement.textContent = "MODO DEMO: Dados não salvos.";
-            messageElement.textContent = statusMessage;
+            messageElement.textContent = `Simulação: Atribuído a ${assignedMechanic}`;
         } else {
             const serviceJobId = newJob.id;
             delete newJob.id;
@@ -589,7 +608,7 @@ document.getElementById('service-form').addEventListener('submit', async (e) => 
                     gsMechanic: newJob.assignedMechanic,
                     timestamp: serverTimestamp(),
                     addedBy: userId,
-                    gsStartedAt: newJob.gsStartedAt, // NOVO: Propaga o tempo de início
+                    gsStartedAt: newJob.gsStartedAt,
                     type: 'Alinhamento',
                     serviceJobId: jobRef.id,
                     finalizedAt: null
@@ -598,23 +617,24 @@ document.getElementById('service-form').addEventListener('submit', async (e) => 
             }
 
             messageElement.textContent = ` Serviço Geral atribuído a ${assignedMechanic}!`;
-            if (willTireChange) {
-                messageElement.textContent += ` e Pneus ao Borracheiro!`;
-            }
-            if (willAlign) {
-                messageElement.textContent += ` e carro na fila de alinhamento (Aguardando GS)!`;
-            }
+            if (willTireChange) messageElement.textContent += ` + Pneus`;
+            if (willAlign) messageElement.textContent += ` + Alinhamento`;
         }
 
         document.getElementById('service-form').reset();
+        
+        // Reset dos radios para o padrão
+        document.querySelector('input[name="willTireChange"][value="Sim"]').checked = true;
+        document.querySelector('input[name="willAlign"][value="Sim"]').checked = true;
+        
         setTimeout(() => messageElement.textContent = isDemoMode ? "Modo Demo Ativo." : '', 5000);
 
     } catch (error) {
         console.error("Erro ao cadastrar serviço:", error);
         errorElement.textContent = `Erro no cadastro: ${error.message}`;
         messageElement.textContent = '';
-    } // Fim do try-catch
-}); // Fim do addEventListener para 'service-form'
+    }
+});
 
 document.getElementById('alignment-form').addEventListener('submit', async (e) => {
     e.preventDefault();

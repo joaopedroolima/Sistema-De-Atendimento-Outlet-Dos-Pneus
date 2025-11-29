@@ -39,8 +39,8 @@ let serviceJobs = [];
 let alignmentQueue = [];
 let ads = [];
 let hiddenItemIds = new Set();
-const PROMOTIONS_SCROLL_WAIT = 3 * 1000; // Tempo de espera para o scroll de promoções (ajustado para 3s)
-const ONGOING_SERVICES_SCROLL_WAIT = 10000; // CORREÇÃO: Intervalo de 10 segundos entre os scrolls
+const PROMOTIONS_SCROLL_WAIT = 3 * 1000; 
+const ONGOING_SERVICES_SCROLL_WAIT = 10000; 
 
 const API_BASE_URL = 'https://marketing-api.lucasscosilva.workers.dev';
 let adCycleTimeout = null;
@@ -65,10 +65,23 @@ function waitForFirebaseAuth() {
 async function initializeSystem() {
     setupClock();
     setupRealtimeListeners();
-    fetchAds();
-    await fetchGlobalConfig(); 
-    await fetchIntervalConfig(); 
+    // Carrega tudo na primeira vez
+    await updateAllExternalData(); 
     startAdCycle();
+}
+
+// FUNÇÃO AUXILIAR NOVA: Atualiza tudo de uma vez (Anúncios + Configurações)
+async function updateAllExternalData() {
+    try {
+        await Promise.all([
+            fetchAds(),
+            fetchGlobalConfig(),
+            fetchIntervalConfig()
+        ]);
+        console.log("Dados externos (Anúncios e Configs) atualizados.");
+    } catch (e) {
+        console.error("Erro ao atualizar dados externos:", e);
+    }
 }
 
 function setupClock() {
@@ -156,7 +169,7 @@ function renderDisplay() {
         }
         const vehicle = getVehicle(car.licensePlate);
         vehicle.model = car.carModel || vehicle.model;
-        vehicle.status = car.status; // CORREÇÃO: Garante que o status do veículo consolidado seja atualizado.
+        vehicle.status = car.status; 
         if (!vehicle.id) vehicle.id = car.id;
         
         const isAlignmentCompleted = [STATUS_READY, STATUS_ALIGNMENT_FINISHED, 'Pronto para Pagamento', 'Finalizado'].includes(car.status);
@@ -177,8 +190,6 @@ function renderDisplay() {
     });
 
     const displayItems = Array.from(vehicleData.values()).filter(vehicle => {
-        // Se o status geral do veículo já é "Pronto para Pagamento",
-        // ele não deve mais aparecer na lista de "Serviços em Andamento".
         if (vehicle.status === STATUS_READY) {
             return false;
         }
@@ -215,7 +226,7 @@ function renderServiceList(items) {
                 if (service.completed) {
                     statusText = 'Concluído';
                 } else if (service.status === STATUS_ATTENDING) {
-                    statusText = 'Atendendo'; // Texto encurtado para caber melhor
+                    statusText = 'Atendendo'; 
                     statusTextClass = 'in-progress';
                 } else {
                     statusText = `${item.alignmentPosition}º Fila`;
@@ -310,22 +321,19 @@ const ScrollManager = {
                 element.scrollWidth - element.clientWidth :
                 element.scrollHeight - element.clientHeight;
 
-            // CORREÇÃO: A verificação de pausa global (para anúncios) e de conteúdo (scrollLength)
-            // agora afeta apenas a instância atual, garantindo que as áreas de scroll sejam independentes.
             if (this.isPaused || scrollLength <= 2) {
                 instance.isScrolling = false;
                 return;
             }
             instance.isScrolling = true;
             
-            // Usa a constante de tempo correta baseada no ID do elemento
             const waitTime = element.id === 'ongoing-services-cards' ? ONGOING_SERVICES_SCROLL_WAIT : PROMOTIONS_SCROLL_WAIT;
 
             instance.timeoutId = setTimeout(scrollForward, waitTime); 
         };
         const scrollForward = () => {
             if (this.isPaused) return;
-            const duration = isHorizontal ? 20000 : (element.id === 'promotions-list' ? 2000 : 6000); // CORREÇÃO: Scroll de promoções mais rápido (2 segundos)
+            const duration = isHorizontal ? 20000 : (element.id === 'promotions-list' ? 2000 : 6000); 
             const target = isHorizontal ? element.scrollWidth - element.clientWidth : element.scrollHeight - element.clientHeight;
             this.smoothScroll(element, target, duration, scrollBackward, isHorizontal);
         };
@@ -388,6 +396,7 @@ async function fetchGlobalConfig() {
         if (response.ok) {
             const config = await response.json();
             if (config?.value) globalImageDuration = parseInt(config.value, 10);
+            console.log("Config atualizada - Duração Imagem:", globalImageDuration);
         }
     } catch (e) { console.error(e); }
 }
@@ -398,6 +407,7 @@ async function fetchIntervalConfig() {
         if (response.ok) {
             const config = await response.json();
             if (config?.value) queueDisplayInterval = parseInt(config.value, 10);
+            console.log("Config atualizada - Intervalo Dashboard:", queueDisplayInterval);
         }
     } catch (e) { console.error(e); }
 }
@@ -411,6 +421,7 @@ async function fetchAds() {
             .filter(item => item.status === 'ativo')
             .map(item => ({ ...item, type: item.type === 'Imagem' ? 'image' : 'video' }))
             .sort((a, b) => (a.order || 99) - (b.order || 99));
+        console.log("Anúncios atualizados. Total:", ads.length);
     } catch (e) { ads = []; }
 }
 
@@ -420,35 +431,30 @@ function startAdCycle() {
     // Garante que o intervalo seja um número válido, padrão 10s se der erro
     const intervalTime = queueDisplayInterval && !isNaN(queueDisplayInterval) ? queueDisplayInterval : 10000;
     
-    console.log(`Iniciando contagem para próximo anúncio: ${intervalTime / 1000} segundos`);
+    console.log(`Próximo ciclo de anúncios em: ${intervalTime / 1000} segundos`);
     adCycleTimeout = setTimeout(showNextAd, intervalTime);
 }
 
-// Substitua a função showNextAd atual por esta:
 function showNextAd() {
-    // 1. Segurança: Limpa qualquer cronômetro anterior para evitar cortes bruscos
     if (adCycleTimeout) {
         clearTimeout(adCycleTimeout);
         adCycleTimeout = null;
     }
 
-    // 2. Verifica se a fila está vazia (Lógica de ping-pong mantida)
     if (!ads || ads.length === 0) {
         console.log("Fila de anúncios vazia. Buscando atualizações...");
-        fetchAds().then(() => {
+        // CORREÇÃO: Tenta atualizar TUDO (Ads + Configs) se a lista estiver vazia
+        updateAllExternalData().then(() => {
             if (ads && ads.length > 0) {
                 currentAdIndex = 0;
                 startAdCycle(); 
             } else {
-                adCycleTimeout = setTimeout(showNextAd, 60000); // Tenta de novo em 1 min
+                adCycleTimeout = setTimeout(showNextAd, 60000);
             }
-        }).catch(() => {
-            adCycleTimeout = setTimeout(showNextAd, 60000);
         });
         return;
     }
 
-    // Proteção de Índice
     if (currentAdIndex >= ads.length) {
         currentAdIndex = 0;
     }
@@ -456,63 +462,49 @@ function showNextAd() {
     const ad = ads[currentAdIndex];
     currentAdIndex = (currentAdIndex + 1) % ads.length;
 
-    // Prepara a tela
     ScrollManager.pauseAll();
     queueContainer.classList.add('hidden');
     adContainer.innerHTML = '';
     adContainer.classList.remove('hidden');
 
-    // --- LÓGICA DE VÍDEO RESTAURADA E MELHORADA ---
     if (ad.type === 'video') {
         const video = document.createElement('video');
         video.src = ad.url;
         video.autoplay = true;
-        video.muted = false; // Tenta com som primeiro
+        video.muted = false; 
         video.playsInline = true;
         
-        // Só fecha quando o vídeo realmente terminar
         video.onended = () => {
-            console.log("Vídeo finalizado. Retornando ao dashboard.");
+            console.log("Vídeo finalizado.");
             hideAdAndResume();
         };
         
         video.onerror = (e) => {
-            console.error("Erro no carregamento do vídeo:", e);
+            console.error("Erro vídeo:", e);
             hideAdAndResume();
         };
 
         adContainer.appendChild(video);
         
-        // Tenta dar play. Se o navegador bloquear o som, tenta tocar mudo.
         const playPromise = video.play();
         if (playPromise !== undefined) {
             playPromise.catch(error => {
-                console.warn("Autoplay com som bloqueado. Tentando mudo...", error);
                 video.muted = true;
-                video.play().catch(e => {
-                    console.error("Autoplay falhou totalmente:", e);
-                    // Só aqui, se falhar tudo, pulamos o anúncio
-                    hideAdAndResume();
-                });
+                video.play().catch(() => hideAdAndResume());
             });
         }
 
     } else {
-        // --- LÓGICA DE IMAGEM ---
         const img = document.createElement('img');
         img.src = ad.url;
         
         img.onload = () => {
-            // Garante a conversão correta de segundos para milissegundos
             const durationInSeconds = ad.duration ? parseInt(ad.duration, 10) : globalImageDuration;
             const displayTime = durationInSeconds * 1000;
-            
-            // Define o tempo exato desta imagem
             adCycleTimeout = setTimeout(hideAdAndResume, displayTime);
         };
         
         img.onerror = () => {
-            console.error("Erro ao carregar imagem:", ad.url);
             hideAdAndResume();
         };
         adContainer.appendChild(img);
@@ -520,19 +512,15 @@ function showNextAd() {
 }
 
 function hideAdAndResume() {
-    // Esconde anúncio, mostra dashboard
     adContainer.classList.add('hidden');
     queueContainer.classList.remove('hidden');
     ScrollManager.resumeAll();
 
-    // --- CORREÇÃO DO DELAY ---
-    // 1. Iniciamos o ciclo do dashboard IMEDIATAMENTE. 
-    // Não esperamos o fetchAds terminar. Isso garante que o tempo seja exato.
-    startAdCycle();
+    startAdCycle(); // Reinicia com o intervalo atual
 
-    // 2. Atualizamos a lista em segundo plano ("silenciosamente")
-    // Assim, na próxima vez que rodar o showNextAd, a lista já estará nova.
-    fetchAds().catch(console.error);
+    // CORREÇÃO: Busca Anúncios E Configurações (Duração/Intervalo) em segundo plano
+    // para estarem prontos no próximo ciclo
+    updateAllExternalData();
 }
 
 let isFirstRender = true;
@@ -544,7 +532,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (isFirstRender) {
             const ongoing = document.getElementById('ongoing-services-cards');
             if (ongoing) {
-                ScrollManager.init(ongoing); // Revertido para a inicialização padrão
+                ScrollManager.init(ongoing); 
             }
             ScrollManager.init(document.getElementById('promotions-list'));
             const completed = document.getElementById('completed-services-cards');

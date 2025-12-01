@@ -2553,6 +2553,7 @@ function renderReadyJobs(serviceJobs, alignmentQueue) {
         }
 
         // NOVO: Renderiza os contadores de resumo do dia
+        // NOVO: Renderiza os contadores de resumo do dia
         function renderDailySummary() {
             const container = document.getElementById('daily-summary-container');
             if (!container) return;
@@ -2573,12 +2574,34 @@ function renderReadyJobs(serviceJobs, alignmentQueue) {
 
             const periodLabel = { daily: 'Hoje', weekly: 'na Semana', monthly: 'no Mês' }[historyPeriod];
 
-
             const finalizedServicesToday = serviceJobs.filter(j => j.status === STATUS_FINALIZED && periodFilterFn(j.finalizedAt)).length;
-            // CORREÇÃO: A contagem de perdidos deve incluir tanto os serviços gerais quanto os de alinhamento.
+            
+            // --- CORREÇÃO DE CONTAGEM (Lógica Anti-Duplicidade) ---
+            
+            // 1. Conta todos os serviços gerais perdidos
             const lostServicesToday = serviceJobs.filter(j => j.status === STATUS_LOST && periodFilterFn(j.finalizedAt)).length;
-            const lostAlignmentsToday = alignmentQueue.filter(a => a.status === STATUS_LOST && periodFilterFn(a.finalizedAt)).length;
-            const totalLostToday = lostServicesToday + lostAlignmentsToday;
+            
+            // 2. Conta alinhamentos perdidos, MAS ignora se o serviço pai também estiver perdido
+            const uniqueLostAlignments = alignmentQueue.filter(a => {
+                // Primeiro checa se é um alinhamento perdido no período
+                const isLost = a.status === STATUS_LOST && periodFilterFn(a.finalizedAt);
+                if (!isLost) return false;
+
+                // Se tiver um serviço pai (serviceJobId), verifica o status dele
+                if (a.serviceJobId) {
+                    const parentService = serviceJobs.find(s => s.id === a.serviceJobId);
+                    // Se o pai existe e também é perdido, NÃO contamos este alinhamento (retorna false)
+                    // pois ele já foi contabilizado na contagem de 'lostServicesToday' acima.
+                    if (parentService && parentService.status === STATUS_LOST) {
+                        return false;
+                    }
+                }
+                // Se não tem pai ou o pai não está perdido, conta este alinhamento (retorna true)
+                return true;
+            }).length;
+
+            // 3. Soma apenas os únicos
+            const totalLostToday = lostServicesToday + uniqueLostAlignments;
 
             container.innerHTML = `
                 <div class="flex justify-between items-center p-3 bg-green-100 rounded-lg">
@@ -2591,9 +2614,6 @@ function renderReadyJobs(serviceJobs, alignmentQueue) {
                 </div>
             `;
         }
-
-
-
 
         /**
          * NOVO: Calcula e renderiza todo o Dashboard de Desempenho (Req 2.x e 3.x)
@@ -2756,15 +2776,30 @@ function renderReadyJobs(serviceJobs, alignmentQueue) {
 
             // CORREÇÃO: Adiciona os serviços de alinhamento perdidos ao histórico de perdas.
             // A contagem no resumo já estava correta, mas a lista do histórico não os incluía.
+            // CORREÇÃO: Adiciona os serviços de alinhamento perdidos ao histórico de perdas.
+            // A contagem no resumo já estava correta, mas a lista do histórico não os incluía.
             const lostAlignmentsToday = alignmentQueue.filter(a => a.status === STATUS_LOST && periodFilterFn(a.finalizedAt));
+            
             lostAlignmentsToday.forEach(job => {
+                // LÓGICA ANTI-DUPLICIDADE (REQ USUÁRIO):
+                // Se o alinhamento tem um ID de serviço pai (serviceJobId), verificamos o status desse pai.
+                if (job.serviceJobId) {
+                    const parentService = serviceJobs.find(s => s.id === job.serviceJobId);
+                    
+                    // Se o serviço principal existe e TAMBÉM está marcado como PERDIDO, 
+                    // ignoramos este item de alinhamento para não duplicar no histórico.
+                    // O item aparecerá apenas como "Mecânica/Serviço Geral".
+                    if (parentService && parentService.status === STATUS_LOST) {
+                        return; 
+                    }
+                }
+
                 lostHistoryList.push({
                     car: `${job.licensePlate} (${job.carModel || 'N/A'})`,
                     vendedor: job.vendedorName,
                     etapa: 'Fila de Alinhamento' // Define a etapa da perda para alinhamentos.
                 });
             });
-
 
             // Processa Alinhamentos Manuais (que não têm serviceJobId)
             finalizedAlignmentsToday.filter(c => c.status === STATUS_FINALIZED).forEach(car => {

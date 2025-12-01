@@ -34,7 +34,8 @@ body {
     border-bottom: 3px solid #f59e0b; /* Amarelo */
 }
 .mechanic-card {
-    min-height: 150px;
+    height: fit-content; /* Se ajusta ao conteúdo */
+    min-height: 0;       /* Remove a altura mínima forçada */
 }
 .ready-row {
     background-color: #fffbeb; /* Fundo amarelo claro para READY */

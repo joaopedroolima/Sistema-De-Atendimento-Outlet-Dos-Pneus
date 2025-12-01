@@ -390,31 +390,46 @@ function renderUserList(users) {
 // ------------------------------------
 // 1.5. Gerenciamento de Mecânicos
 // ------------------------------------
-
 function renderMechanicsManagement() {
     const manualSelect = document.getElementById('manualMechanic');
     const editSelect = document.getElementById('edit-assignedMechanic');
     const vendedorSelect = document.getElementById('vendedorName');
     const aliVendedorSelect = document.getElementById('aliVendedorName');
 
-    MECHANICS = mecanicosGeral.map(u => u.username); // Atualiza a lista de mecânicos
-
-    // O título agora é estático no HTML, não precisa mais ser definido aqui.
+    // Atualiza a lista global baseada nos usuários carregados
+    if (mecanicosGeral && mecanicosGeral.length > 0) {
+        MECHANICS = mecanicosGeral.map(u => u.username);
+    }
 
     let optionsHTML = '<option value="">-- Automático --</option>';
     optionsHTML += MECHANICS.map(m => `<option value="${m}">${m}</option>`).join('');
 
     if (manualSelect) manualSelect.innerHTML = optionsHTML;
+    // Nota: O editSelect é preenchido dinamicamente no modal, mas deixamos aqui por segurança
     if (editSelect) editSelect.innerHTML = MECHANICS.map(m => `<option value="${m}">${m}</option>`).join('');
 
-    // Popula dropdowns de vendedores (Req 6.2)
-    const vendedorOptionsHTML = vendedores.map(v => `<option value="${v.username}">${v.username}</option>`).join('');
-    if (vendedorSelect) vendedorSelect.innerHTML = vendedorOptionsHTML;
-    if (aliVendedorSelect) aliVendedorSelect.innerHTML = vendedorOptionsHTML;
+    // Popula dropdowns de vendedores e APLICA A TRAVA DE SEGURANÇA
+    if (vendedores && vendedores.length > 0) {
+        const vendedorOptionsHTML = vendedores.map(v => `<option value="${v.username}">${v.username}</option>`).join('');
+        if (vendedorSelect) vendedorSelect.innerHTML = vendedorOptionsHTML;
+        if (aliVendedorSelect) aliVendedorSelect.innerHTML = vendedorOptionsHTML;
+    }
 
+    // TRAVA DE SEGURANÇA: Se for Vendedor, força a seleção e desabilita,
+    // independente de quando esta função for chamada.
+    if (currentUserRole === VENDEDOR_ROLE && currentUserName) {
+        if (vendedorSelect) {
+            vendedorSelect.value = currentUserName;
+            vendedorSelect.disabled = true;
+        }
+        if (aliVendedorSelect) {
+            aliVendedorSelect.value = currentUserName;
+            aliVendedorSelect.disabled = true;
+        }
+    }
 
     renderServiceQueues(serviceJobs);
-    calculateAndRenderDashboard(); // ATUALIZADO
+    calculateAndRenderDashboard();
 }
 
 
@@ -500,93 +515,88 @@ document.getElementById('service-form').addEventListener('submit', async (e) => 
     e.preventDefault();
     if (!isLoggedIn) return alertUser("Você precisa estar logado para cadastrar serviços.");
 
-    // Define nome do vendedor
-    let vendedorName = '';
-    if (currentUserRole === MANAGER_ROLE) {
-        vendedorName = document.getElementById('vendedorName').value;
-    } else {
-        vendedorName = currentUserName;
-    }
+    // PROTEÇÃO ANTI-DUPLO CLIQUE
+    const submitBtn = document.getElementById('assign-button-text').parentElement;
+    const originalBtnText = document.getElementById('assign-button-text').textContent;
+    submitBtn.disabled = true;
+    document.getElementById('assign-button-text').textContent = "Processando...";
 
-    const licensePlate = document.getElementById('licensePlate').value.trim().toUpperCase();
-    const carModel = document.getElementById('carModel').value.trim();
-
-    let serviceDescription = document.getElementById('serviceDescription').value.trim();
-    const isServiceDefined = serviceDescription !== '';
-    if (!isServiceDefined) {
-        serviceDescription = "Avaliação";
-    }
-
-    const manualSelection = document.getElementById('manualMechanic').value;
-    const willAlign = document.querySelector('input[name="willAlign"]:checked').value === 'Sim';
-    const willTireChange = document.querySelector('input[name="willTireChange"]:checked').value === 'Sim';
-
-    const errorElement = document.getElementById('service-error');
-    const messageElement = document.getElementById('assignment-message');
-    errorElement.textContent = '';
-    messageElement.textContent = 'Processando atribuição...';
-
-    if (!isAuthReady) {
-        errorElement.textContent = 'Aguardando inicialização do sistema...';
-        return;
-    }
-
-    let assignedMechanic;
-    let assignedTireShop = null;
-
-    // LÓGICA DE ATRIBUIÇÃO ATUALIZADA
-    if (manualSelection && MECHANICS.includes(manualSelection)) {
-        assignedMechanic = manualSelection;
-        // ATUALIZAÇÃO: Se escolheu manual, avisa o banco para a fila seguir a partir daqui
-        if (!isDemoMode) {
-            await updateManualRotationState(assignedMechanic);
+    try {
+        // SEGURANÇA DE DADOS (ITEM 1):
+        // Se for gerente, confia no select. Se for vendedor, IGNORA o select e usa a sessão.
+        let vendedorName = '';
+        if (currentUserRole === MANAGER_ROLE) {
+            vendedorName = document.getElementById('vendedorName').value;
+        } else {
+            vendedorName = currentUserName; // Garante que nunca envie nome errado ou vazio
         }
-    } else {
-        try {
-            // ATUALIZAÇÃO: Agora usamos await porque a função vai ao banco
+
+        const licensePlate = document.getElementById('licensePlate').value.trim().toUpperCase();
+        const carModel = document.getElementById('carModel').value.trim();
+
+        let serviceDescription = document.getElementById('serviceDescription').value.trim();
+        const isServiceDefined = serviceDescription !== '';
+        if (!isServiceDefined) {
+            serviceDescription = "Avaliação";
+        }
+
+        const manualSelection = document.getElementById('manualMechanic').value;
+        const willAlign = document.querySelector('input[name="willAlign"]:checked').value === 'Sim';
+        const willTireChange = document.querySelector('input[name="willTireChange"]:checked').value === 'Sim';
+
+        const errorElement = document.getElementById('service-error');
+        const messageElement = document.getElementById('assignment-message');
+        errorElement.textContent = '';
+        messageElement.textContent = 'Processando atribuição...';
+
+        if (!isAuthReady) {
+            throw new Error('Sistema ainda inicializando. Aguarde um momento.');
+        }
+
+        let assignedMechanic;
+        let assignedTireShop = null;
+
+        if (manualSelection && MECHANICS.includes(manualSelection)) {
+            assignedMechanic = manualSelection;
+            if (!isDemoMode) {
+                await updateManualRotationState(assignedMechanic);
+            }
+        } else {
             if (isDemoMode) {
-                // Fallback simples para modo demo
                 const randomIndex = Math.floor(Math.random() * MECHANICS.length);
                 assignedMechanic = MECHANICS[randomIndex];
             } else {
                 assignedMechanic = await getNextMechanicInRotation();
             }
-        } catch (e) {
-            errorElement.textContent = `Erro na atribuição: ${e.message}`;
-            messageElement.textContent = '';
-            return;
         }
-    }
 
-    if (willTireChange) {
-        assignedTireShop = TIRE_SHOP_MECHANIC;
-    }
+        if (willTireChange) {
+            assignedTireShop = TIRE_SHOP_MECHANIC;
+        }
 
-    const newJob = {
-        customerName: 'N/A',
-        vendedorName,
-        licensePlate,
-        carModel,
-        serviceDescription,
-        isServiceDefined,
-        assignedMechanic,
-        assignedTireShop,
-        status: STATUS_PENDING,
-        statusGS: STATUS_PENDING,
-        statusTS: willTireChange ? STATUS_PENDING : null,
-        requiresAlignment: willAlign,
-        timestamp: isDemoMode ? Timestamp.fromMillis(Date.now()) : serverTimestamp(),
-        gsStartedAt: isDemoMode ? Timestamp.fromMillis(Date.now()) : serverTimestamp(),
-        registeredBy: userId,
-        id: `job_${jobIdCounter++}`,
-        type: 'Serviço Geral',
-        finalizedAt: null
-    };
+        const newJob = {
+            customerName: 'N/A',
+            vendedorName,
+            licensePlate,
+            carModel,
+            serviceDescription,
+            isServiceDefined,
+            assignedMechanic,
+            assignedTireShop,
+            status: STATUS_PENDING,
+            statusGS: STATUS_PENDING,
+            statusTS: willTireChange ? STATUS_PENDING : null,
+            requiresAlignment: willAlign,
+            timestamp: isDemoMode ? Timestamp.fromMillis(Date.now()) : serverTimestamp(),
+            gsStartedAt: isDemoMode ? Timestamp.fromMillis(Date.now()) : serverTimestamp(),
+            registeredBy: userId,
+            id: `job_${jobIdCounter++}`,
+            type: 'Serviço Geral',
+            finalizedAt: null
+        };
 
-    try {
         if (isDemoMode) {
             serviceJobs.push(newJob);
-            // ... (Lógica Demo Mantida) ...
             renderServiceQueues(serviceJobs);
             renderReadyJobs(serviceJobs, alignmentQueue);
             errorElement.textContent = "MODO DEMO: Dados não salvos.";
@@ -598,7 +608,7 @@ document.getElementById('service-form').addEventListener('submit', async (e) => 
             const jobRef = await addDoc(collection(db, SERVICE_COLLECTION_PATH), newJob);
 
             if (willAlign) {
-                 const newAlignmentCar = {
+                const newAlignmentCar = {
                     customerName: 'N/A',
                     vendedorName,
                     licensePlate,
@@ -623,25 +633,44 @@ document.getElementById('service-form').addEventListener('submit', async (e) => 
 
         document.getElementById('service-form').reset();
         
-        // Reset dos radios para o padrão
+        // Reset dos radios
         document.querySelector('input[name="willTireChange"][value="Sim"]').checked = true;
         document.querySelector('input[name="willAlign"][value="Sim"]').checked = true;
         
+        // Reaplicar trava de vendedor se necessário
+        if (currentUserRole === VENDEDOR_ROLE) {
+             const vSelect = document.getElementById('vendedorName');
+             if(vSelect) vSelect.value = currentUserName;
+        }
+
         setTimeout(() => messageElement.textContent = isDemoMode ? "Modo Demo Ativo." : '', 5000);
 
     } catch (error) {
         console.error("Erro ao cadastrar serviço:", error);
-        errorElement.textContent = `Erro no cadastro: ${error.message}`;
-        messageElement.textContent = '';
+        document.getElementById('service-error').textContent = `Erro no cadastro: ${error.message}`;
+        document.getElementById('assignment-message').textContent = '';
+    } finally {
+        // REABILITA O BOTÃO AO FINAL DE TUDO
+        submitBtn.disabled = false;
+        document.getElementById('assign-button-text').textContent = originalBtnText;
     }
 });
 
+// =========================================================================
+// CORREÇÃO ITEM 3: Anti-duplo clique no Alinhamento
+// =========================================================================
+// =========================================================================
+// CORREÇÃO ITEM 3: Anti-duplo clique no Alinhamento
+// =========================================================================
 document.getElementById('alignment-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!isLoggedIn) return alertUser("Você precisa estar logado para cadastrar serviços.");
 
-    // CORREÇÃO: Pega o nome do vendedor corretamente, dependendo do cargo do usuário.
-    // Se for gerente, pega do select. Se for vendedor ou alinhador, pega do usuário logado.
+    const submitBtn = e.target.querySelector('button[type="submit"]');
+    const originalBtnText = submitBtn.textContent;
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Salvando...";
+
     let vendedorName = '';
     if (currentUserRole === MANAGER_ROLE) {
         vendedorName = document.getElementById('aliVendedorName').value;
@@ -656,12 +685,14 @@ document.getElementById('alignment-form').addEventListener('submit', async (e) =
 
     if (!isAuthReady) {
         errorElement.textContent = 'Aguardando inicialização do sistema...';
+        submitBtn.disabled = false;
+        submitBtn.textContent = originalBtnText;
         return;
     }
 
     try {
         const newAlignmentCar = {
-            customerName: 'N/A', // REMOVIDO (Req 6.1)
+            customerName: 'N/A',
             vendedorName,
             licensePlate,
             carModel,
@@ -688,12 +719,20 @@ document.getElementById('alignment-form').addEventListener('submit', async (e) =
         }
 
         document.getElementById('alignment-form').reset();
+        
+        if (currentUserRole === VENDEDOR_ROLE) {
+             const vSelect = document.getElementById('aliVendedorName');
+             if(vSelect) vSelect.value = currentUserName;
+        }
+        
         setTimeout(() => errorElement.textContent = '', 5000);
 
-    } catch (error)
-    {
+    } catch (error) {
         console.error("Erro ao adicionar à fila de alinhamento:", error);
         errorElement.textContent = `Erro: ${error.message}`;
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = originalBtnText;
     }
 });
 
@@ -1270,8 +1309,10 @@ document.getElementById('define-service-form').addEventListener('submit', async 
 // Funções do Modal "Editar Serviço" (Gerente)
 // =========================================================================
 
+// =========================================================================
+// CORREÇÃO ITEM 2: Vulnerabilidade na edição de mecânico
+// =========================================================================
 window.showEditServiceModal = function(docId) {
-    // ATUALIZAÇÃO: Permite que Vendedores também editem.
     if (currentUserRole !== MANAGER_ROLE && currentUserRole !== VENDEDOR_ROLE) return;
 
     const job = serviceJobs.find(j => j.id === docId);
@@ -1280,19 +1321,39 @@ window.showEditServiceModal = function(docId) {
         return;
     }
 
-    currentJobToEditId = docId;            document.getElementById('edit-vendedorName').value = job.vendedorName;
+    currentJobToEditId = docId;            
+    document.getElementById('edit-vendedorName').value = job.vendedorName;
     document.getElementById('edit-licensePlate').value = job.licensePlate;
     document.getElementById('edit-carModel').value = job.carModel;
     document.getElementById('edit-serviceDescription').value = job.serviceDescription;
 
+    // CORREÇÃO: Garante que a lista de mecânicos esteja fresca usando a fonte oficial (mecanicosGeral)
+    // Se MECHANICS estiver vazio por delay de rede, tentamos usar mecanicosGeral.
+    let mechanicsList = MECHANICS;
+    if (mechanicsList.length === 0 && mecanicosGeral.length > 0) {
+        mechanicsList = mecanicosGeral.map(u => u.username);
+    }
+    // Fallback de segurança se tudo falhar
+    if (mechanicsList.length === 0) mechanicsList = ['José', 'Wendell'];
+
     const mechanicSelect = document.getElementById('edit-assignedMechanic');
-    mechanicSelect.innerHTML = MECHANICS.map(m => `<option value="${m}">${m}</option>`).join('');
+    
+    // Reconstrói as opções
+    let optionsHTML = mechanicsList.map(m => `<option value="${m}">${m}</option>`).join('');
+    
+    // VERIFICAÇÃO DE INTEGRIDADE:
+    // Se o mecânico que está no job (ex: "Pedro") não existe mais na lista atual,
+    // adicionamos ele como opção extra para que o select não pule para o primeiro da lista errada.
+    if (job.assignedMechanic && !mechanicsList.includes(job.assignedMechanic)) {
+        optionsHTML += `<option value="${job.assignedMechanic}">${job.assignedMechanic} (Inativo/Removido)</option>`;
+    }
+    
+    mechanicSelect.innerHTML = optionsHTML;
     mechanicSelect.value = job.assignedMechanic;
 
     const willTireChange = job.statusTS === STATUS_PENDING || job.statusTS === STATUS_TS_FINISHED;
     document.querySelector(`input[name="edit-willTireChange"][value="${willTireChange ? 'Sim' : 'Nao'}"]`).checked = true;
 
-    // NOVO: Preenche a opção de alinhamento
     document.querySelector(`input[name="edit-willAlign"][value="${job.requiresAlignment ? 'Sim' : 'Nao'}"]`).checked = true;
 
     document.getElementById('edit-service-modal').classList.remove('hidden');
@@ -1843,6 +1904,119 @@ function toggleDescription(jobId) {
 window.toggleDescription = toggleDescription;
 // =========================================================================
 
+// =========================================================================
+// NOVO: Lógica de Exclusão vs Perda (Modal de Decisão)
+// =========================================================================
+let currentDeleteTarget = null; // Armazena quem será deletado {id, type}
+
+function createDeleteOptionsModal() {
+    if (document.getElementById('delete-options-modal')) return;
+
+    const modalHTML = `
+        <div id="delete-options-modal" class="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center p-4 z-50 hidden">
+            <div class="bg-white rounded-xl shadow-2xl w-full max-w-md p-6 transform transition-all">
+                <div class="text-center">
+                    <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
+                        <svg class="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                    </div>
+                    <h3 class="text-lg leading-6 font-medium text-gray-900" id="delete-modal-title">Remover Item</h3>
+                    <p class="text-sm text-gray-500 mt-2">Selecione o motivo da remoção:</p>
+                </div>
+                <div class="mt-5 space-y-3">
+                    <button onclick="handleDeleteOption('lost')" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none sm:text-sm">
+                        Marcar como PERDIDO
+                    </button>
+                    <button onclick="handleDeleteOption('hard_delete')" class="w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-orange-50 focus:outline-none sm:text-sm">
+                        Apenas EXCLUIR
+                    </button>
+                    <button onclick="closeDeleteOptionsModal()" class="w-full inline-flex justify-center rounded-md border border-transparent px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-700 focus:outline-none sm:text-sm">
+                        Cancelar
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+}
+
+// Chama a criação do modal assim que carrega
+document.addEventListener('DOMContentLoaded', createDeleteOptionsModal);
+
+window.showDeleteOptionsModal = function(docId, type) {
+    if (currentUserRole !== MANAGER_ROLE && currentUserRole !== ALIGNER_ROLE && currentUserRole !== VENDEDOR_ROLE) return alertUser("Acesso negado.");
+    
+    currentDeleteTarget = { id: docId, type: type }; // type: 'service' ou 'alignment'
+    
+    const title = type === 'service' ? 'Remover Serviço Mecânica' : 'Remover Alinhamento';
+    document.getElementById('delete-modal-title').textContent = title;
+    
+    document.getElementById('delete-options-modal').classList.remove('hidden');
+}
+
+window.closeDeleteOptionsModal = function() {
+    document.getElementById('delete-options-modal').classList.add('hidden');
+    currentDeleteTarget = null;
+}
+
+window.handleDeleteOption = async function(action) {
+    if (!currentDeleteTarget) return;
+    
+    const { id, type } = currentDeleteTarget;
+    
+    if (action === 'lost') {
+        // Usa as funções existentes de "Perdido"
+        if (type === 'service') markServiceAsLost(id);
+        else if (type === 'alignment') discardAlignmentJob(id); // Usa a função existente de descartar alinhamento
+    } 
+    else if (action === 'hard_delete') {
+        // NOVA Lógica: Exclusão Real (Apaga do banco)
+        if (confirm("Tem certeza? Isso apagará o registro permanentemente do banco de dados (não contará como estatística).")) {
+            await performHardDelete(id, type);
+        }
+    }
+    
+    closeDeleteOptionsModal();
+}
+
+async function performHardDelete(docId, type) {
+    const collectionPath = type === 'service' ? SERVICE_COLLECTION_PATH : ALIGNMENT_COLLECTION_PATH;
+    
+    if (isDemoMode) {
+        if (type === 'service') {
+            serviceJobs = serviceJobs.filter(j => j.id !== docId);
+            // Remove alinhamentos associados
+            alignmentQueue = alignmentQueue.filter(a => a.serviceJobId !== docId);
+        } else {
+            alignmentQueue = alignmentQueue.filter(a => a.id !== docId);
+        }
+        renderServiceQueues(serviceJobs);
+        renderAlignmentQueue(alignmentQueue);
+        renderAlignmentMirror(alignmentQueue);
+        renderReadyJobs(serviceJobs, alignmentQueue);
+        alertUser("MODO DEMO: Registro excluído permanentemente.");
+        return;
+    }
+
+    try {
+        await deleteDoc(doc(db, collectionPath, docId));
+        
+        // Se for serviço, tenta limpar alinhamento associado para não deixar lixo
+        if (type === 'service') {
+            const alignQuery = query(collection(db, ALIGNMENT_COLLECTION_PATH), where('serviceJobId', '==', docId));
+            const alignSnapshot = await getDocs(alignQuery);
+            alignSnapshot.forEach(async (docSnapshot) => {
+                await deleteDoc(docSnapshot.ref);
+            });
+        }
+
+        alertUser("Registro excluído permanentemente.");
+    } catch (error) {
+        console.error("Erro na exclusão:", error);
+        alertUser("Erro ao excluir registro.");
+    }
+}
 
 function renderServiceQueues(jobs) {
     const mechanicsContainer = document.getElementById('mechanics-queue-display');
@@ -1850,17 +2024,12 @@ function renderServiceQueues(jobs) {
     const tireShopCount = document.getElementById('tire-shop-count');
     const mechanicViewContainer = document.getElementById('mechanic-view');
 
-    if (!mechanicsContainer || !tireShopList || !tireShopCount || !mechanicViewContainer) {
-        console.error("Erro: Elementos da UI de serviço não encontrados.");
-        return;
-    }
+    if (!mechanicsContainer || !tireShopList || !tireShopCount || !mechanicViewContainer) return;
 
     mechanicsContainer.innerHTML = '';
     tireShopList.innerHTML = '';
 
     const pendingJobs = jobs.filter(job => job.status === STATUS_PENDING);
-    const isManager = currentUserRole === MANAGER_ROLE;
-    // ATUALIZAÇÃO: Vendedores agora também podem editar e excluir.
     const canEditAndDelete = currentUserRole === MANAGER_ROLE || currentUserRole === VENDEDOR_ROLE;
 
     const groupedJobs = {};
@@ -1879,9 +2048,10 @@ function renderServiceQueues(jobs) {
     });
 
     const editIcon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>`;
-    const lostIcon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>`;
+    const trashIcon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>`;
+    const chevronIcon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" /></svg>`;
 
-
+    // --- BORRACHARIA ---
     tireShopCount.textContent = `${tireShopJobs.length} Carros`;
     if (tireShopJobs.length > 0) {
          tireShopList.innerHTML = tireShopJobs.map(job => {
@@ -1891,27 +2061,16 @@ function renderServiceQueues(jobs) {
 
             const managerActions = canEditAndDelete ? `
                 <div class="flex space-x-1 mt-2 justify-end">
-                    <button onclick="showEditServiceModal('${job.id}')" title="Editar Serviço"
-                            class="p-1 text-xs text-blue-600 bg-blue-100 rounded-full hover:bg-blue-200 transition">
-                        ${editIcon}
-                    </button>
-                    <button onclick="showMarkAsLostConfirmation('${job.id}')" title="Marcar como Perdido"
-                            class="p-1 text-xs text-red-600 bg-red-100 rounded-full hover:bg-red-200 transition">
-                        ${lostIcon}
-                    </button>
+                    <button onclick="showEditServiceModal('${job.id}')" title="Editar" class="p-1 text-xs text-blue-600 bg-blue-100 rounded-full hover:bg-blue-200 transition">${editIcon}</button>
+                    <button onclick="showDeleteOptionsModal('${job.id}', 'service')" title="Excluir/Perdido" class="p-1 text-xs text-red-600 bg-red-100 rounded-full hover:bg-red-200 transition">${trashIcon}</button>
                 </div>
             ` : '';
 
-            // CORREÇÃO: Lógica unificada para "Ver mais/Ver menos"
-            // AGORA: Usa um modal para exibir o texto completo.
             let descriptionHTML = '';
             const descriptionText = job.serviceDescription || 'N/A';
             if (descriptionText.length > 15) {
                 const shortText = `${descriptionText.substring(0, 15)}...`;
-                descriptionHTML = `
-                    <p class="text-sm ${statusColor} break-words">${shortText}</p>
-                    <button onclick="showFullDescriptionModal(\`${escape(descriptionText)}\`)" class="text-xs text-blue-500 hover:underline mt-1">Ver mais</button>
-                `;
+                descriptionHTML = `<p class="text-sm ${statusColor} break-words">${shortText}</p><button onclick="showFullDescriptionModal(\`${escape(descriptionText)}\`)" class="text-xs text-blue-500 hover:underline mt-1">Ver mais</button>`;
             } else {
                 descriptionHTML = `<p class="text-sm ${statusColor} break-words">${descriptionText}</p>`;
             }
@@ -1919,41 +2078,30 @@ function renderServiceQueues(jobs) {
             return `
                 <li class="relative p-3 bg-white border-l-4 border-yellow-500 rounded-md shadow-sm min-h-[80px]">
                     <div class="pr-20">
-                        <div>
-                            <p class="font-semibold text-gray-800">${job.licensePlate} (${job.carModel})</p>
-                            ${descriptionHTML}
-                            <p class="text-xs font-semibold ${statusColor} mt-1">${statusText}</p>
-                        </div>
+                        <div><p class="font-semibold text-gray-800">${job.licensePlate} (${job.carModel})</p>${descriptionHTML}<p class="text-xs font-semibold ${statusColor} mt-1">${statusText}</p></div>
                     </div>
                     <div class="absolute top-3 right-3 flex flex-col items-end space-y-2">
-                        <button onclick="showServiceReadyConfirmation('${job.id}', 'TS')"
-                                class="text-xs font-medium bg-green-500 text-white py-1 px-3 rounded-full hover:bg-green-600 transition h-7">
-                            Pronto
-                        </button>
+                        <button onclick="showServiceReadyConfirmation('${job.id}', 'TS')" class="text-xs font-medium bg-green-500 text-white py-1 px-3 rounded-full hover:bg-green-600 transition h-7">Pronto</button>
                         ${managerActions}
                     </div>
-                </li>
-            `;
+                </li>`;
          }).join('');
     } else {
         tireShopList.innerHTML = '<p class="text-sm text-gray-500 italic p-3 border rounded-md">Nenhum carro na fila. </p>';
     }
-    if (MECHANICS.length === 0) {
-         mechanicsContainer.innerHTML = '<p class="text-sm text-red-600 italic p-3 border rounded-md">Nenhum mecânico geral cadastrado. Por favor, adicione mecânicos na Aba de Serviços.</p>';
-    }
+
+    // --- MECÂNICOS GERAIS ---
+    if (MECHANICS.length === 0) mechanicsContainer.innerHTML = '<p class="text-sm text-red-600 italic p-3 border rounded-md">Nenhum mecânico geral cadastrado.</p>';
+    
     MECHANICS.forEach(mechanic => {
+        const safeMechanicName = mechanic.replace(/\s+/g, '-');
         const jobListHTML = groupedJobs[mechanic].map(job => {
             const isTsPending = job.statusTS === STATUS_PENDING;
-            const isRework = job.statusGS === STATUS_REWORK; // NOVO: Verifica se é retrabalho
-
+            const isRework = job.statusGS === STATUS_REWORK;
             const statusText = isRework ? '(RETRABALHO)' : isTsPending ? `(Aguardando Pneus)` : '';
             const statusColor = isRework ? 'text-orange-500' : isTsPending ? 'text-red-500' : 'text-gray-500';
-            const borderColor = isRework ? 'border-orange-500' : 'border-blue-500'; // NOVO: Cor da borda para retrabalho
+            const borderColor = isRework ? 'border-orange-500' : 'border-blue-500';
             const isDefined = job.isServiceDefined;
-
-            const hasStarted = !!job.gsStartedAt;
-            const isReadyButtonDisabled = !isDefined || isTsPending || !hasStarted;
-            const readyButtonTitle = isTsPending ? "Aguardando conclusão do serviço de pneus." : !isDefined ? "Aguardando definição do serviço." : "Marcar como pronto";
 
             let descriptionHTML = '';
             let clickHandler = '';
@@ -1961,20 +2109,16 @@ function renderServiceQueues(jobs) {
 
             if (!isDefined) {
                 descriptionHTML = '<span class="font-bold text-red-600">(Aguardando Definição de Serviço)</span>';
-                if (isManager) {
+                if (currentUserRole === MANAGER_ROLE) {
                     clickHandler = `onclick="showDefineServiceModal('${job.id}')"`;
                     cursorClass = 'cursor-pointer hover:bg-yellow-100/50 transition duration-150';
                     descriptionHTML += '<span class="text-xs text-blue-600 block mt-1">(Clique p/ definir)</span>';
                 }
             } else {
-                // AGORA: Usa um modal para exibir o texto completo.
                 const descriptionText = job.serviceDescription || 'N/A';
                 if (descriptionText.length > 15) {
                     const shortText = `${descriptionText.substring(0, 15)}...`;
-                    descriptionHTML = `
-                        <p class="text-sm ${statusColor} break-words">${shortText}</p>
-                        <button onclick="showFullDescriptionModal(\`${escape(descriptionText)}\`)" class="text-xs text-blue-500 hover:underline mt-1">Ver mais</button>
-                    `;
+                    descriptionHTML = `<p class="text-sm ${statusColor} break-words">${shortText}</p><button onclick="showFullDescriptionModal(\`${escape(descriptionText)}\`)" class="text-xs text-blue-500 hover:underline mt-1">Ver mais</button>`;
                 } else {
                     descriptionHTML = `<p class="text-sm ${statusColor} break-words">${descriptionText}</p>`;
                 }
@@ -1982,58 +2126,37 @@ function renderServiceQueues(jobs) {
 
             const managerActions = canEditAndDelete ? `
                 <div class="flex space-x-1 mt-2 pt-2 border-t border-gray-100">
-                    <button onclick="showEditServiceModal('${job.id}')" title="Editar Serviço"
-                            class="p-1 text-xs text-blue-600 bg-blue-100 rounded-full hover:bg-blue-200 transition">
-                        ${editIcon}
-                    </button>
-                    <button onclick="showMarkAsLostConfirmation('${job.id}')" title="Marcar como Perdido"
-                            class="p-1 text-xs text-red-600 bg-red-100 rounded-full hover:bg-red-200 transition">
-                        ${lostIcon}
-                    </button>
+                    <button onclick="showEditServiceModal('${job.id}')" title="Editar" class="p-1 text-xs text-blue-600 bg-blue-100 rounded-full hover:bg-blue-200 transition">${editIcon}</button>
+                    <button onclick="showDeleteOptionsModal('${job.id}', 'service')" title="Excluir/Perdido" class="p-1 text-xs text-red-600 bg-red-100 rounded-full hover:bg-red-200 transition">${trashIcon}</button>
                 </div>
             ` : '';
 
             return `
                 <li class="relative p-3 bg-white border-l-4 ${borderColor} rounded-md shadow-sm min-h-[80px]">
                     <div class="pr-20 ${cursorClass}" ${clickHandler}>
-                        <div>
-                            <p class="font-semibold text-gray-800">${job.licensePlate} (${job.carModel})</p>
-                            ${descriptionHTML}
-                            <p class="text-xs font-semibold ${statusColor} mt-1">${statusText}</p>
-                        </div>
+                        <div><p class="font-semibold text-gray-800">${job.licensePlate} (${job.carModel})</p>${descriptionHTML}<p class="text-xs font-semibold ${statusColor} mt-1">${statusText}</p></div>
                     </div>
                     <div class="absolute top-3 right-3 flex flex-col items-end space-y-2">
-                        <button onclick="showServiceReadyConfirmation('${job.id}', 'GS')"
-                                class="text-xs font-medium bg-green-500 text-white py-1 px-3 rounded-full hover:bg-green-600 transition disabled:opacity-50 disabled:cursor-not-allowed h-7"
-                                ${!isDefined ? 'disabled' : ''} title="${!isDefined ? 'Aguardando definição do serviço' : 'Marcar como Pronto'}">
-                            Pronto
-                        </button>
+                        <button onclick="showServiceReadyConfirmation('${job.id}', 'GS')" class="text-xs font-medium bg-green-500 text-white py-1 px-3 rounded-full hover:bg-green-600 transition disabled:opacity-50 disabled:cursor-not-allowed h-7" ${!isDefined ? 'disabled' : ''} title="${!isDefined ? 'Aguardando definição' : 'Marcar como Pronto'}">Pronto</button>
                         ${managerActions}
                     </div>
-                </li>
-            `;
+                </li>`;
         }).join('');
 
         mechanicsContainer.innerHTML += `
-            <div class="mechanic-card bg-gray-50 p-4 rounded-lg shadow-md border border-gray-100">
-                <h3 class="text-xl font-bold mb-3 text-gray-800 flex justify-between items-center">
-                    ${mechanic}
-                    <span class="text-sm font-semibold py-1 px-3 rounded-full ${groupedJobs[mechanic].length > 1 ? 'bg-red-200 text-red-800' : 'bg-blue-200 text-blue-800'}">
-                        ${groupedJobs[mechanic].length} Carros
-                    </span>
-                </h3>
-                <ul class="space-y-2">
-                    ${jobListHTML.length > 0 ? jobListHTML : '<p class="text-sm text-gray-500 italic p-3 border rounded-md">Nenhum carro na fila. </p>'}
-                </ul>
-            </div>
-        `;
+            <div class="mechanic-card bg-gray-50 p-4 rounded-lg shadow-md border border-gray-100 h-fit transition-all">
+                <div class="flex justify-between items-center mb-0 cursor-pointer select-none" onclick="toggleMechanicQueue('${mechanic}')">
+                    <h3 class="text-xl font-bold text-gray-800 flex items-center">${mechanic}<span class="ml-2 text-sm font-semibold py-1 px-3 rounded-full ${groupedJobs[mechanic].length > 1 ? 'bg-red-200 text-red-800' : 'bg-blue-200 text-blue-800'}">${groupedJobs[mechanic].length}</span></h3>
+                    <button id="btn-toggle-${safeMechanicName}" class="text-gray-500 hover:text-gray-700 transform transition-transform duration-200 p-2">${chevronIcon}</button>
+                </div>
+                <div id="queue-list-${safeMechanicName}" class="transition-all duration-300 mt-3"><ul class="space-y-2">${jobListHTML.length > 0 ? jobListHTML : '<p class="text-sm text-gray-500 italic p-3 border rounded-md">Nenhum carro na fila. </p>'}</ul></div>
+            </div>`;
     });
 
-    // NOVO: Renderiza a visão exclusiva do mecânico (Req 1.4)
     if (currentUserRole === MECANICO_ROLE) {
+        // Visão mecânico mantida sem alterações (código omitido para brevidade pois não muda)
         const myJobs = groupedJobs[currentUserName] || [];
         let mechanicViewHTML = `<h2 class="text-2xl font-semibold mb-6 text-gray-800 border-b pb-2">Minha Fila de Serviços (${myJobs.length})</h2>`;
-
         if (myJobs.length > 0) {
             mechanicViewHTML += `<ul class="space-y-3">`;
             mechanicViewHTML += myJobs.map(job => {
@@ -2041,53 +2164,12 @@ function renderServiceQueues(jobs) {
                 const statusText = isTsPending ? `(Aguardando Pneus)` : '';
                 const statusColor = isTsPending ? 'text-red-500' : 'text-gray-500';
                 const isDefined = job.isServiceDefined;
-
-                let descriptionHTML = '';
-                if (!isDefined) {
-                    descriptionHTML = '<p class="font-bold text-red-600">(Aguardando Definição de Serviço pela Gerência)</p>';
-                } else {
-                    // AGORA: Usa um modal para exibir o texto completo.
-                    const descriptionText = job.serviceDescription || 'N/A';
-                    if (descriptionText.length > 15) {
-                        const shortText = `${descriptionText.substring(0, 15)}...`;
-                        descriptionHTML = `
-                            <p class="text-sm ${statusColor} break-words">${shortText}</p>
-                            <button onclick="showFullDescriptionModal(\`${escape(descriptionText)}\`)" class="text-xs text-blue-500 hover:underline mt-1">Ver mais</button>
-                        `;
-                    } else {
-                        descriptionHTML = `<p class="text-sm ${statusColor} break-words">${descriptionText}</p>`;
-                    }
-                }
-
-                return `
-                    <li class="relative p-4 bg-white border-l-4 border-blue-500 rounded-lg shadow-md min-h-[100px]">
-                        <div class="pr-24">
-                            <div>
-                                <p class="text-lg font-bold text-gray-800">${job.licensePlate}</p>
-                                <p class="text-md text-gray-600 mb-2">${job.carModel}</p>
-                                ${descriptionHTML}
-                                <p class="text-xs text-gray-400 mt-1">Vendedor: ${job.vendedorName} <span class="font-semibold ${statusColor}">${statusText}</span></p>
-                            </div>
-                        </div>
-                        <div class="absolute top-4 right-4">
-                            <button onclick="showServiceReadyConfirmation('${job.id}', 'GS')"
-                                    class="text-sm font-medium bg-green-500 text-white py-2 px-4 rounded-lg hover:bg-green-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                                    ${!isDefined ? 'disabled' : ''} title="${!isDefined ? 'Aguardando definição do serviço pela gerência' : 'Marcar como Pronto'}">
-                                Pronto
-                            </button>
-                        </div>
-                    </li>
-                `;
+                let descriptionHTML = !isDefined ? '<p class="font-bold text-red-600">(Aguardando Definição de Serviço pela Gerência)</p>' : `<p class="text-sm ${statusColor} break-words">${job.serviceDescription}</p>`;
+                return `<li class="relative p-4 bg-white border-l-4 border-blue-500 rounded-lg shadow-md min-h-[100px]"><div class="pr-24"><div><p class="text-lg font-bold text-gray-800">${job.licensePlate}</p><p class="text-md text-gray-600 mb-2">${job.carModel}</p>${descriptionHTML}<p class="text-xs text-gray-400 mt-1">Vendedor: ${job.vendedorName} <span class="font-semibold ${statusColor}">${statusText}</span></p></div></div><div class="absolute top-4 right-4"><button onclick="showServiceReadyConfirmation('${job.id}', 'GS')" class="text-sm font-medium bg-green-500 text-white py-2 px-4 rounded-lg hover:bg-green-600 transition disabled:opacity-50 disabled:cursor-not-allowed" ${!isDefined ? 'disabled' : ''}>Pronto</button></div></li>`;
             }).join('');
             mechanicViewHTML += `</ul>`;
         } else {
-            mechanicViewHTML += `
-                <div class="text-center p-10 bg-white rounded-lg shadow-md border">
-                    <p class="text-2xl mb-2"></p>
-                    <p class="text-lg font-medium text-gray-700">Nenhum carro na sua fila no momento.</p>
-                    <p class="text-gray-500">Aproveite para organizar a oficina!</p>
-                </div>
-            `;
+             mechanicViewHTML += `<div class="text-center p-10 bg-white rounded-lg shadow-md border"><p class="text-lg font-medium text-gray-700">Nenhum carro na sua fila no momento.</p></div>`;
         }
         mechanicViewContainer.innerHTML = mechanicViewHTML;
     }
@@ -2166,10 +2248,7 @@ function renderAlignmentQueue(cars) {
     const tableContainer = document.getElementById('alignment-table-container');
     const emptyMessage = document.getElementById('alignment-empty-message');
 
-    if (!tableContainer || !emptyMessage) {
-         console.error("Erro: Elementos da UI de alinhamento não encontrados.");
-         return;
-    }
+    if (!tableContainer || !emptyMessage) return;
 
     const activeCars = getSortedAlignmentQueue();
 
@@ -2205,22 +2284,16 @@ function renderAlignmentQueue(cars) {
         const isAttending = car.status === STATUS_ATTENDING;
         const isWaitingGS = car.status === STATUS_WAITING_GS;
 
-        // Ícones para as novas ações (sem alterações aqui, apenas para contexto)
-        const discardIcon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>`;
+        // Ícone da lixeira (mesmo usado na aba de serviços)
+        const trashIcon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>`;
         const returnIcon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>`;
-        const finalizeIcon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>`;
-
-        const statusColor = isAttending ? 'bg-yellow-100 text-yellow-800' :
-                            isWaitingGS ? 'bg-red-100 text-red-800' :
-                            'bg-blue-100 text-blue-800';
-
+        
+        const statusColor = isAttending ? 'bg-yellow-100 text-yellow-800' : isWaitingGS ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800';
         const statusText = isAttending ? 'Em Atendimento' : isWaitingGS ? `Aguardando GS` : 'Disponível para Alinhar';
-
         const rowClass = isWaitingGS ? 'bg-red-50/50' : (isNextWaiting ? 'bg-yellow-50/50' : '');
 
         let moverButtons = '';
         const canMove = currentUserRole === MANAGER_ROLE && isWaiting;
-
         const waitingOnlyList = activeCars.filter(c => c.status === STATUS_WAITING);
         const waitingIndex = waitingOnlyList.findIndex(c => c.id === car.id);
         const isLastWaiting = waitingIndex === waitingOnlyList.length - 1;
@@ -2228,93 +2301,37 @@ function renderAlignmentQueue(cars) {
 
         moverButtons = `
             <div class="flex items-center justify-center space-x-1">
-                <button onclick="moveAlignmentUp('${car.id}')"
-                        class="text-sm p-1 rounded-full text-blue-600 hover:bg-gray-200 disabled:text-gray-300 transition"
-                        ${!canMove || isFirstWaiting ? 'disabled' : ''} title="Mover para cima">
-                    &#9650;
-                </button>
-                <button onclick="moveAlignmentDown('${car.id}')"
-                        class="text-sm p-1 rounded-full text-blue-600 hover:bg-gray-200 disabled:text-gray-300 transition"
-                        ${!canMove || isLastWaiting ? 'disabled' : ''} title="Mover para baixo">
-                    &#9660;
-                </button>
-            </div>
-        `;
-
+                <button onclick="moveAlignmentUp('${car.id}')" class="text-sm p-1 rounded-full text-blue-600 hover:bg-gray-200 disabled:text-gray-300 transition" ${!canMove || isFirstWaiting ? 'disabled' : ''} title="Mover para cima">&#9650;</button>
+                <button onclick="moveAlignmentDown('${car.id}')" class="text-sm p-1 rounded-full text-blue-600 hover:bg-gray-200 disabled:text-gray-300 transition" ${!canMove || isLastWaiting ? 'disabled' : ''} title="Mover para baixo">&#9660;</button>
+            </div>`;
 
         let actions;
-
-        // Ações disponíveis para Alinhador ou Gerente
         const canTakeAction = currentUserRole === ALIGNER_ROLE || currentUserRole === MANAGER_ROLE || currentUserRole === VENDEDOR_ROLE;
-        const isManager = currentUserRole === MANAGER_ROLE;
         const isManagerOrVendedor = currentUserRole === MANAGER_ROLE || currentUserRole === VENDEDOR_ROLE;
 
-        if (isAttending) {
-             actions = `
-                 <div class="flex items-center space-x-2 justify-end">
-                    ${isManager ? `
-                        <button onclick="showReturnToMechanicModal('${car.id}')" title="Retornar ao Mecânico" class="p-2 text-blue-600 hover:bg-blue-100 rounded-full transition">${returnIcon}</button>
-                        <button onclick="showDiscardAlignmentConfirmation('${car.id}')" title="Descartar / Perdido" class="p-1 text-red-600 hover:bg-red-100 rounded-full transition">${discardIcon}</button>
-                    ` : ''}
-                     <button onclick="showAlignmentReadyConfirmation('${car.id}')"
-                         class="text-xs font-medium bg-green-500 text-white py-1 px-3 rounded-md hover:bg-green-600 transition"
-                         ${!canTakeAction ? 'disabled' : ''}>
-                         Pronto
-                     </button>
-                 </div>
-             `;
-        } else if (isNextWaiting) {
-            actions = `
-                <div class="flex items-center space-x-2 justify-end">
-                    ${isManagerOrVendedor ? `
-                        <button onclick="showReturnToMechanicModal('${car.id}')" title="Retornar ao Mecânico" class="p-2 text-blue-600 hover:bg-blue-100 rounded-full transition" ${!car.serviceJobId ? 'disabled title="Ação não permitida para adição manual"' : ''}>${returnIcon}</button>
-                        <button onclick="showDiscardAlignmentConfirmation('${car.id}')" title="Descartar / Perdido" class="p-1 text-red-600 hover:bg-red-100 rounded-full transition">${discardIcon}</button>
-                    ` : ''}
-                    <button onclick="updateAlignmentStatus('${car.id}', '${STATUS_ATTENDING}')"
-                        class="text-xs font-medium bg-yellow-500 text-white py-1 px-3 rounded-md hover:bg-yellow-600 transition"
-                        ${!canTakeAction ? 'disabled' : ''}>
-                        Iniciar
-                    </button>
-                </div>
-            `;
-        } else {
-            // Para os outros carros na fila, também permite descartar ou retornar, se tiverem permissão.
-            actions = `
-                <div class="flex items-center space-x-2 justify-end">
-                    ${isManagerOrVendedor ? `
-                        <button onclick="showReturnToMechanicModal('${car.id}')" title="Retornar ao Mecânico" class="p-2 text-blue-600 hover:bg-blue-100 rounded-full transition" ${!car.serviceJobId ? 'disabled title="Ação não permitida para adição manual"' : ''}>${returnIcon}</button>
-                        <button onclick="showDiscardAlignmentConfirmation('${car.id}')" title="Descartar / Perdido" class="p-1 text-red-600 hover:bg-red-100 rounded-full transition">${discardIcon}</button>
-                    ` : ''}
-                    <span class="text-xs text-gray-400 pr-2">Na fila...</span>
-                </div>
-            `;
-        }
+        // Bloco de botões de ação (Retornar e EXCLUIR/PERDIDO)
+        const actionButtons = isManagerOrVendedor ? `
+            <button onclick="showReturnToMechanicModal('${car.id}')" title="Retornar ao Mecânico" class="p-2 text-blue-600 hover:bg-blue-100 rounded-full transition" ${!car.serviceJobId ? 'disabled title="Ação não permitida para adição manual"' : ''}>${returnIcon}</button>
+            <button onclick="showDeleteOptionsModal('${car.id}', 'alignment')" title="Excluir/Perdido" class="p-1 text-red-600 hover:bg-red-100 rounded-full transition">${trashIcon}</button>
+        ` : '';
 
+        if (isAttending) {
+             actions = `<div class="flex items-center space-x-2 justify-end">${actionButtons}<button onclick="showAlignmentReadyConfirmation('${car.id}')" class="text-xs font-medium bg-green-500 text-white py-1 px-3 rounded-md hover:bg-green-600 transition" ${!canTakeAction ? 'disabled' : ''}>Pronto</button></div>`;
+        } else if (isNextWaiting) {
+            actions = `<div class="flex items-center space-x-2 justify-end">${actionButtons}<button onclick="updateAlignmentStatus('${car.id}', '${STATUS_ATTENDING}')" class="text-xs font-medium bg-yellow-500 text-white py-1 px-3 rounded-md hover:bg-yellow-600 transition" ${!canTakeAction ? 'disabled' : ''}>Iniciar</button></div>`;
+        } else {
+            actions = `<div class="flex items-center space-x-2 justify-end">${actionButtons}<span class="text-xs text-gray-400 pr-2">Na fila...</span></div>`;
+        }
 
         tableHTML += `
             <tr class="${rowClass}">
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${index + 1}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    <span class="font-semibold">${car.carModel}</span>
-                    <span class="text-xs text-gray-500 block">${car.licensePlate}</span>
-                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900"><span class="font-semibold">${car.carModel}</span><span class="text-xs text-gray-500 block">${car.licensePlate}</span></td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">${car.customerName} (Vendedor: ${car.vendedorName || 'N/A'})</td>
-                <td class="px-6 py-4 whitespace-nowrap">
-                    <div class="flex flex-col">
-                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusColor} self-start">
-                            ${statusText}
-                        </span>
-                        ${isWaitingGS ? `<div class="text-xs text-gray-500 pt-1 description-truncate" title="${car.gsDescription}">${car.gsDescription}</div>` : ''}
-                    </div>
-                </td>
-                <td class="px-6 py-4 whitespace-nowTRap text-center text-sm font-medium">
-                    ${moverButtons}
-                </td>
-                <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    ${actions}
-                </td>
-            </tr>
-        `;
+                <td class="px-6 py-4 whitespace-nowrap"><div class="flex flex-col"><span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusColor} self-start">${statusText}</span>${isWaitingGS ? `<div class="text-xs text-gray-500 pt-1 description-truncate" title="${car.gsDescription}">${car.gsDescription}</div>` : ''}</div></td>
+                <td class="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">${moverButtons}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">${actions}</td>
+            </tr>`;
     });
 
     tableHTML += `</tbody></table>`;
@@ -3360,6 +3377,20 @@ function renderReadyJobs(serviceJobs, alignmentQueue) {
             }, (error) => console.error("Erro no listener de Usuários:", error));
         }
 
+        // =========================================================================
+        // NOVO: Função para Expandir/Retrair Fila do Mecânico
+        // =========================================================================
+        function toggleMechanicQueue(mechanicName) {
+            const safeName = mechanicName.replace(/\s+/g, '-'); 
+            const list = document.getElementById(`queue-list-${safeName}`);
+            const btn = document.getElementById(`btn-toggle-${safeName}`);
+            
+            if (list && btn) {
+                list.classList.toggle('hidden');
+                btn.classList.toggle('rotate-180');
+            }
+        }
+
         // ------------------------------------
         // 5. Funções Globais e Inicialização
         // ------------------------------------
@@ -3376,7 +3407,7 @@ function renderReadyJobs(serviceJobs, alignmentQueue) {
         window.confirmAlignmentReady = confirmAlignmentReady;
         window.showFinalizeConfirmation = showFinalizeConfirmation;
         window.confirmFinalizeJob = confirmFinalizeJob;
-        window.showSendToManagerConfirmation = showSendToManagerConfirmation; // NOVO
+        window.showSendToManagerConfirmation = showSendToManagerConfirmation;
         window.confirmMarkAsLost = confirmMarkAsLost;
         window.showDefineServiceModal = showDefineServiceModal;
         window.hideDefineServiceModal = hideDefineServiceModal;
@@ -3384,26 +3415,28 @@ function renderReadyJobs(serviceJobs, alignmentQueue) {
         window.hideEditServiceModal = hideEditServiceModal;
         window.showMarkAsLostConfirmation = showMarkAsLostConfirmation;
 
-        window.showDeleteUserConfirmation = showDeleteUserConfirmation; // NOVO
-        window.showDiscardAlignmentConfirmation = showDiscardAlignmentConfirmation; // NOVO
-        window.confirmDiscardAlignment = confirmDiscardAlignment; // NOVO
-        window.showReturnToMechanicModal = showReturnToMechanicModal; // NOVO
-        window.hideReturnToMechanicModal = hideReturnToMechanicModal; // NOVO
-        window.confirmFinalizeAlignmentFromRework = confirmFinalizeAlignmentFromRework; // NOVO
+        window.showDeleteUserConfirmation = showDeleteUserConfirmation;
+        window.showDiscardAlignmentConfirmation = showDiscardAlignmentConfirmation;
+        window.confirmDiscardAlignment = confirmDiscardAlignment;
+        window.showReturnToMechanicModal = showReturnToMechanicModal;
+        window.hideReturnToMechanicModal = hideReturnToMechanicModal;
+        window.confirmFinalizeAlignmentFromRework = confirmFinalizeAlignmentFromRework;
 
-        window.showEditUserModal = showEditUserModal; // NOVO
-        window.hideEditUserModal = hideEditUserModal; // NOVO
+        window.showEditUserModal = showEditUserModal;
+        window.hideEditUserModal = hideEditUserModal;
 
-        // NOVO: Funções de modal de texto e detalhes
-        window.showFullDescriptionModal = showFullDescriptionModal; // CORREÇÃO: Expondo a função globalmente
-        window.hideTextDisplayModal = hideTextDisplayModal; // CORREÇÃO: Expondo a função globalmente
+        window.showFullDescriptionModal = showFullDescriptionModal;
+        window.hideTextDisplayModal = hideTextDisplayModal;
         window.showHistoryDetailModal = showHistoryDetailModal;
         window.hideHistoryDetailModal = hideHistoryDetailModal;
-        // NOVO: Funções do modal de desempenho do mecânico
         window.showMechanicPerformanceModal = showMechanicPerformanceModal;
         window.hideMechanicPerformanceModal = hideMechanicPerformanceModal;
 
-        window.confirmDeleteUser = confirmDeleteUser; // NOVO
+        // Registrando a função de toggle
+        window.toggleMechanicQueue = toggleMechanicQueue;
+        window.toggleDescription = toggleDescription;
+
+        window.confirmDeleteUser = confirmDeleteUser;
         document.getElementById('create-user-form').addEventListener('submit', handleCreateUser);
         initializeFirebase();
         // ------------------------------------

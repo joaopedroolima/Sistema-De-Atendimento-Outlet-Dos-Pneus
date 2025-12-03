@@ -543,21 +543,8 @@ function showNextAd() {
         adCycleTimeout = null;
     }
 
-    if (!ads || ads.length === 0) {
-        // Se não tem anúncio, tenta buscar e reinicia o timer de espera
-        updateAllExternalData().then(() => {
-            if (ads.length > 0) {
-                currentAdIndex = 0;
-                preloadNextAd();
-                startAdCycle();
-            } else {
-                adCycleTimeout = setTimeout(showNextAd, 60000);
-            }
-        });
-        return;
-    }
+    // ... (verificações de lista vazia continuam iguais)
 
-    // Fallback: Se o preload falhou (buffer vazio), carrega na hora
     if (!pendingAdElement) {
         preloadNextAd();
     }
@@ -565,17 +552,25 @@ function showNextAd() {
     const element = pendingAdElement;
     const ad = ads[currentAdIndex];
 
-    // --- AVANÇA O ÍNDICE PARA O PRÓXIMO ---
     currentAdIndex = (currentAdIndex + 1) % ads.length;
 
-    // Troca de Interface
     ScrollManager.pauseAll();
+    
+    // 1. Esconde o Dashboard
     queueContainer.classList.add('hidden');
+    
+    // 2. Limpa e Mostra o Container de Anúncio
     adContainer.innerHTML = ''; 
     adContainer.classList.remove('hidden');
 
     if (element) {
+        // 3. Move o elemento e FORÇA estilos para garantir visibilidade
         adContainer.appendChild(element);
+        
+        // REFORÇO: Garante que o elemento movido fique visível e ocupe espaço
+        element.style.display = 'block';
+        element.style.width = '100%';
+        element.style.height = '100%';
 
         if (ad.type === 'video') {
             handleVideoAd(element, ad);

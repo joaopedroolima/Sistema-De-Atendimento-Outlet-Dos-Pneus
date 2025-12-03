@@ -1,7 +1,7 @@
 /* --- GERAL E RESET --- */
 :root {
     --background-color: #F8F9FA;
-    --primary-yellow: #fbd230; /* Cor amarela padronizada, conforme solicitado */
+    --primary-yellow: #fbd230; /* Cor amarela padronizada */
     --dark-text: #212529;
     --light-text: #495057;
     --border-color: #DEE2E6;
@@ -109,7 +109,6 @@ body {
     padding: 1.5rem;
     display: flex;
     flex-direction: column;
-    /* Centraliza o grid verticalmente se houver espaço sobrando */
     justify-content: center; 
     min-height: 0;
     position: relative;
@@ -129,7 +128,7 @@ body {
     background-color: var(--in-progress-blue);
     color: #fbd230;
     border-radius: 6px 6px 0 0;
-    text-shadow: -1.5px -1.5px 0 #000, 1.5px -1.5px 0 #000, -1.5px 1.5px 0 #000, 1.5px 1.5px 0 #000, 0px 2px 2px rgba(0,0,0,0.3); /* Contorno preto grosso */
+    text-shadow: -1.5px -1.5px 0 #000, 1.5px -1.5px 0 #000, -1.5px 1.5px 0 #000, 1.5px 1.5px 0 #000, 0px 2px 2px rgba(0,0,0,0.3);
     z-index: 10;
 }
 
@@ -146,8 +145,8 @@ body {
     align-content: start;
     overflow-x: auto;
     overflow-y: hidden;
-    padding-top: 4rem; /* CORREÇÃO: Adiciona espaço no topo para não ser coberto pelo cabeçalho */
-    padding-bottom: 1rem; /* Aumenta o espaço inferior para melhor visualização */
+    padding-top: 4rem; 
+    padding-bottom: 1rem; 
     -ms-overflow-style: none;
     scrollbar-width: none;
 }
@@ -163,7 +162,7 @@ body {
     display: flex;
 }
 
-/* --- CARD REESTRUTURADO (Title Top / Steps Bottom) --- */
+/* --- CARD REESTRUTURADO --- */
 .service-card {
     background-color: var(--background-color);
     border: 1px solid var(--primary-yellow);
@@ -171,29 +170,22 @@ body {
     padding: 0.5rem;
     width: 100%;
     height: 100%;
-    
     display: flex;
-    flex-direction: column; /* Organiza verticalmente: Título em cima, etapas embaixo */
-    justify-content: space-between;
-    justify-content: flex-start; /* Alinha os itens no topo */
-    
+    flex-direction: column; 
+    justify-content: flex-start;
     box-shadow: 0 3px 6px rgba(0,0,0,0.08);
 }
 
-/* Topo do Card: Informações do Carro */
+/* Topo do Card */
 .car-info {
     display: flex;
-    flex-direction: row; /* Modelo e Placa na mesma linha ou linha separada */
-    justify-content: center;
-    flex-direction: column; /* Modelo em cima, Placa embaixo */
-    justify-content: flex-start; /* Alinha à esquerda */
-    align-items: baseline;
-    gap: 0.8rem;
-    align-items: flex-start; /* Alinha os itens da coluna à esquerda */
-    gap: 0.2rem; /* Espaçamento vertical menor */
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: flex-start;
+    gap: 0.2rem;
     width: 100%;
     padding-bottom: 0.4rem;
-    border-bottom: 1px solid #e0e0e0; /* Linha separadora suave */
+    border-bottom: 1px solid #e0e0e0;
     margin-bottom: 0.2rem;
 }
 
@@ -205,8 +197,7 @@ body {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 65%;
-    max-width: 100%; /* Permite que o modelo ocupe toda a largura */
+    max-width: 100%;
 }
 
 .service-card .car-plate {
@@ -219,29 +210,27 @@ body {
     letter-spacing: 0.5px;
 }
 
-/* Parte Inferior: Etapas (Horizontal) */
+/* Parte Inferior: Etapas */
 .service-progress {
     display: flex;
-    flex-direction: row; /* Etapas lado a lado */
-    justify-content: space-around; /* Espalha as etapas uniformemente */
+    flex-direction: row; 
+    justify-content: space-around; 
     align-items: center;
     width: 100%;
     flex-grow: 1;
     gap: 0.5rem;
 }
  
-/* Cada item de progresso (Mecânico, Pneus, etc) */
 .progress-item {
     display: flex;
-    flex-direction: column; /* Nome em cima, status embaixo */
+    flex-direction: column; 
     align-items: center;
     justify-content: center;
-    flex: 1; /* Todos ocupam o mesmo espaço */
+    flex: 1; 
     text-align: center;
     position: relative;
 }
 
-/* Linha separadora vertical entre etapas (exceto a última) */
 .progress-item:not(:last-child)::after {
     content: '';
     position: absolute;
@@ -252,7 +241,6 @@ body {
     background-color: #e0e0e0;
 }
 
-/* Cabeçalho do item (Nome + Bolinha) */
 .service-header {
     display: flex;
     flex-direction: row;
@@ -286,7 +274,7 @@ body {
     white-space: nowrap;
 }
 
-.service-status-text.in-progress { color: #E6A200; /* Amarelo mais escuro para melhor legibilidade */ }
+.service-status-text.in-progress { color: #E6A200; }
 .service-status-text.in-queue { color: var(--danger-red); }
 .service-status-text.completed { color: var(--success-green); }
 
@@ -296,10 +284,10 @@ body {
 }
 
 .status-circle.completed {
-    background-color: var(--success-green); /* Verde direto */
+    background-color: var(--success-green);
     border-color: transparent;
     color: white;
-    width: 16px; /* Um pouco maior para o check */
+    width: 16px;
     height: 16px;
     font-size: 0.7rem;
     display: flex;
@@ -309,13 +297,12 @@ body {
     animation: none;
 }
 
-/* Cores específicas para círculos concluídos */
 .status-circle.completed.tires { background-color: var(--service-tires); }
 .status-circle.completed.general { background-color: var(--service-general); }
 .status-circle.completed.alignment { background-color: var(--service-alignment); }
 
 
-/* --- Seção Serviços Concluídos (Coluna Central) --- */
+/* --- Seção Serviços Concluídos --- */
 .completed-services {
     flex: 1 1 auto;
     background-color: #ffffff;
@@ -371,55 +358,46 @@ body {
 }
 
 /* --- Coluna Promoções --- */
-/* --- Coluna Promoções --- */
 .promotions-column {
     display: flex;
     flex-direction: column;
     min-width: 300px;
     max-width: 300px;
     height: 100%;
-    /* Garante que a coluna nunca ultrapasse a altura da tela */
     overflow: hidden; 
 }
 
 .promotions-sidebar {
     background-color: #FFF;
     border-radius: 8px;
-    padding: 0; /* Remove padding geral para o header encostar nas bordas */
+    padding: 0;
     display: flex;
-    flex-direction: column; /* Organiza Header em cima, Lista embaixo */
+    flex-direction: column;
     height: 100%;
     border: 1px solid var(--in-progress-blue);
     position: relative;
-    overflow: hidden; /* Corta qualquer coisa que tente sair das bordas arredondadas */
+    overflow: hidden;
 }
 
-/* Header fixo no topo */
 .promotions-sidebar .section-header {
     background-color: var(--in-progress-blue);
     color: #fcdb83;
     padding: 1rem;
-    position: relative; /* Volta ao fluxo normal */
-    flex-shrink: 0; /* Impede o header de ser esmagado */
+    position: relative;
+    flex-shrink: 0;
     width: 100%;
-    margin: 0; /* Remove margens negativas antigas */
-    border-radius: 0; /* O overflow do pai já cuida do arredondamento */
+    margin: 0;
+    border-radius: 0;
 }
 
-/* Lista com rolagem */
 .promotions-list {
     display: flex;
     flex-direction: column;
     gap: 1rem;
-    flex-grow: 1; /* Ocupa todo o espaço restante abaixo do header */
-    
-    /* Habilita a rolagem */
+    flex-grow: 1;
     overflow-y: auto; 
-    height: 0; /* Truque CSS: força o flex-grow a calcular o limite corretamente */
-    
-    padding: 1rem 1.5rem; /* Adiciona o espaçamento interno aqui, não no pai */
-    
-    /* Esconde a barra de rolagem visualmente, mas mantém a função */
+    height: 0;
+    padding: 1rem 1.5rem;
     -ms-overflow-style: none;
     scrollbar-width: none;
     scroll-behavior: smooth; 
@@ -434,7 +412,7 @@ body {
     padding-left: 1.25rem;
     padding-bottom: 1rem;
     border-bottom: 1px solid #eee;
-    flex-shrink: 0; /* Garante que o item não seja esmagado */
+    flex-shrink: 0;
 }
 
 .promotion-item::before {
@@ -451,10 +429,9 @@ body {
 .promotion-item:last-child {
     border-bottom: none;
     margin-bottom: 0;
-    padding-bottom: 2rem; /* Espaço extra no fim da lista */
+    padding-bottom: 2rem;
 }
 
-/* Estilos de texto da promoção */
 .promotion-item h4 {
     font-size: 1.1rem;
     color: #007BFF;
@@ -481,7 +458,9 @@ body {
     font-size: 0.8rem;
 }
 
-/* --- Anúncios e Utilitários --- */
+/* --- Anúncios e Utilitários (Otimizado) --- */
+
+/* CORREÇÃO TELA PRETA VERCEL & CONTAINER DE ANÚNCIOS */
 #ad-container {
     position: fixed;
     top: 0;
@@ -492,29 +471,38 @@ body {
     display: flex;
     justify-content: center;
     align-items: center;
-    z-index: 100;
-    opacity: 1;
+    z-index: 9999; /* Garante que fica na frente de tudo */
 }
 
+/* Força o conteúdo a preencher a tela mantendo proporção */
+#ad-container video,
 #ad-container img,
-#ad-container video {
+.ad-content {
     width: 100%;
     height: 100%;
-    object-fit: cover;
+    object-fit: contain;
+    display: block;
 }
 
-.hidden { display: none !important; }
-
-/* Container de pré-carregamento: 
-   Mantém o elemento na árvore de renderização para carregar o buffer,
-   mas tira da visão do usuário. */
+/* CONTAINER DE PRELOAD E ANTI-HIBERNAÇÃO
+   Unificamos as classes para garantir que o navegador baixe o vídeo
+   mesmo sem o usuário ver.
+*/
+#preload-container,
+#no-sleep-video,
 .off-screen {
     position: absolute;
-    top: -9999px;
+    top: -9999px; /* Joga para fora da tela */
     left: -9999px;
     width: 1px;
     height: 1px;
+    opacity: 0.01; /* Quase invisível, mas o browser processa */
     overflow: hidden;
-    visibility: hidden; 
     z-index: -1;
+    pointer-events: none; /* O mouse não clica nele */
+}
+
+/* Classe utilitária simples */
+.hidden {
+    display: none !important;
 }

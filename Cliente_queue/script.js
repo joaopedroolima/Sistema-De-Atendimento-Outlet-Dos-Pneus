@@ -47,7 +47,6 @@ let adCycleTimeout = null;
 let globalImageDuration = 10;
 let queueDisplayInterval = 120 * 1000; 
 let currentAdIndex = 0;
-let pendingAdElement = null; // Buffer para pré-renderização
 
 const queueContainer = document.getElementById('queue-container');
 const adContainer = document.getElementById('ad-container');
@@ -72,7 +71,6 @@ async function initializeSystem() {
     
     // 2. Inicia o ciclo explicitamente APÓS ter dados
     if (ads.length > 0) {
-        preloadNextAd();
         startAdCycle();
     }
 }
@@ -461,38 +459,6 @@ async function fetchAds() {
     }
 }
 
-// PRÉ-RENDERIZA O PRÓXIMO ANÚNCIO (Buffer)
-function preloadNextAd() {
-    if (!ads || ads.length === 0) return;
-
-    const preloadContainer = document.getElementById('preload-container');
-    if (!preloadContainer) return;
-
-    preloadContainer.innerHTML = ''; 
-    pendingAdElement = null;
-
-    const ad = ads[currentAdIndex]; 
-
-    console.log(`Pré-carregando background: ${ad.title || 'Anúncio'} (${ad.type})`);
-
-    let element;
-    if (ad.type === 'video') {
-        element = document.createElement('video');
-        element.src = ad.url;
-        element.muted = true; 
-        element.playsInline = true;
-        element.preload = "auto";
-        element.className = "ad-content";
-    } else {
-        element = document.createElement('img');
-        element.src = ad.url;
-        element.className = "ad-content";
-    }
-
-    preloadContainer.appendChild(element);
-    pendingAdElement = element;
-}
-
 function startAdCycle() {
     if (adCycleTimeout) clearTimeout(adCycleTimeout);
     
@@ -515,13 +481,20 @@ function showNextAd() {
         return;
     }
     
-    if (!pendingAdElement) {
-        preloadNextAd();
-    }
-    
-    const element = pendingAdElement;
     const ad = ads[currentAdIndex];
     currentAdIndex = (currentAdIndex + 1) % ads.length;
+
+    let element;
+    if (ad.type === 'video') {
+        element = document.createElement('video');
+        element.src = ad.url;
+        element.playsInline = true;
+        element.className = "ad-content";
+    } else {
+        element = document.createElement('img');
+        element.src = ad.url;
+        element.className = "ad-content";
+    }
 
     ScrollManager.pauseAll();
     
@@ -534,20 +507,16 @@ function showNextAd() {
 
     if (element) {
         adContainer.appendChild(element);
-        
-        if (ad.type === 'video') {
-            handleVideoAd(element, ad);
-        } else {
-            handleImageAd(element, ad);
-        }
-    } else {
-        console.error("Falha ao recuperar buffer. Pulando...");
-        hideAdAndResume();
+
+        if (ad.type === 'video') handleVideoAd(element, ad);
+        else handleImageAd(element, ad);
     }
 }
 
 function handleVideoAd(video, ad) {
-    // 1. Garante que o vídeo esteja configurado para autoplay em ambientes restritivos (como webOS)    
+    // 1. Garante que o vídeo esteja configurado para autoplay em ambientes restritivos (como webOS)
+    video.muted = false; // Tenta tocar com som primeiro
+    video.volume = 1.0;
     video.loop = false; // Garante que o onended será chamado
     video.playsInline = true;
     video.currentTime = 0;
@@ -599,7 +568,6 @@ function hideAdAndResume() {
     ScrollManager.resumeAll();
 
     updateAllExternalData().then(() => {
-        preloadNextAd();
         startAdCycle();
     });
 }

@@ -496,15 +496,12 @@ async function fetchAds() {
 function preloadNextAd() {
     if (!ads || ads.length === 0) return;
 
-    // Limpa buffer anterior
     const preloadContainer = document.getElementById('preload-container');
     if (!preloadContainer) return;
 
     preloadContainer.innerHTML = ''; 
     pendingAdElement = null;
 
-    // A lógica de ciclo está no showNextAd, então aqui pegamos o índice atual
-    // que será usado na próxima execução.
     const ad = ads[currentAdIndex]; 
 
     console.log(`Pré-carregando background: ${ad.title || 'Anúncio'} (${ad.type})`);
@@ -513,7 +510,11 @@ function preloadNextAd() {
     if (ad.type === 'video') {
         element = document.createElement('video');
         element.src = ad.url;
-        element.muted = false; 
+        
+        // MUDANÇA IMPORTANTE: Carregamos mudo no buffer para o navegador 
+        // priorizar o download sem tentar tocar áudio escondido.
+        element.muted = true; 
+        
         element.playsInline = true;
         element.preload = "auto";
         element.className = "ad-content";
@@ -584,7 +585,12 @@ function showNextAd() {
 }
 
 function handleVideoAd(video, ad) {
-    video.autoplay = true;
+    // 1. Reseta o vídeo para garantir que comece do zero
+    video.currentTime = 0;
+    
+    // 2. Tenta ativar o som explicitamente
+    video.volume = 1.0;
+    video.muted = false;
     
     video.onended = () => hideAdAndResume();
     video.onerror = (e) => {
@@ -592,12 +598,20 @@ function handleVideoAd(video, ad) {
         hideAdAndResume();
     };
 
+    // 3. Tenta tocar com som
     const playPromise = video.play();
+    
     if (playPromise !== undefined) {
         playPromise.catch(error => {
-            console.warn("Autoplay bloqueado, tentando mudo:", error);
+            console.warn("Autoplay com som bloqueado pelo navegador. Tentando mudo...", error);
+            
+            // FALLBACK: Se o navegador bloquear o som (porque ninguém clicou na tela),
+            // ele toca mudo para não travar o sistema.
             video.muted = true;
-            video.play().catch(() => hideAdAndResume());
+            video.play().catch(() => {
+                console.error("Autoplay falhou totalmente.");
+                hideAdAndResume();
+            });
         });
     }
 }

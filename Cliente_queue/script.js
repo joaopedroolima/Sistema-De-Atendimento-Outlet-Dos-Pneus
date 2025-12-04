@@ -39,8 +39,8 @@ let serviceJobs = [];
 let alignmentQueue = [];
 let ads = [];
 let hiddenItemIds = new Set();
-const PROMOTIONS_SCROLL_WAIT = 3 * 1000; 
-const ONGOING_SERVICES_SCROLL_WAIT = 10000; 
+const PROMOTIONS_SCROLL_WAIT = 1 * 1000; // Reduzido para 4s
+const ONGOING_SERVICES_SCROLL_WAIT = 1 * 1000; // Reduzido para 5s
 
 const API_BASE_URL = 'https://marketing-api.lucasscosilva.workers.dev';
 let adCycleTimeout = null;
@@ -66,7 +66,6 @@ function waitForFirebaseAuth() {
 async function initializeSystem() {
     setupClock();
     setupRealtimeListeners();
-    initAntiHibernation(); 
 
     // 1. Carrega configurações e anúncios
     await updateAllExternalData(); 
@@ -74,39 +73,6 @@ async function initializeSystem() {
     // 2. Inicia o ciclo explicitamente APÓS ter dados
     if (ads.length > 0) {
         startAdCycle();
-    }
-}
-
-// --- Anti-Hibernação ---
-function initAntiHibernation() {
-    const noSleepVideo = document.getElementById('no-sleep-video');
-    if (noSleepVideo) {
-        const playAttempt = () => {
-            noSleepVideo.play().then(() => {
-                console.log("Anti-hibernação (Pixel Loop): Ativo");
-            }).catch(() => {
-                window.addEventListener('click', playAttempt, { once: true });
-            });
-        };
-        playAttempt();
-    }
-
-    if ('wakeLock' in navigator) {
-        let wakeLock = null;
-        const requestWakeLock = async () => {
-            try {
-                wakeLock = await navigator.wakeLock.request('screen');
-                console.log('Anti-hibernação (WakeLock API): Ativo');
-            } catch (err) {
-                console.log(`Erro Wake Lock: ${err.name}, ${err.message}`);
-            }
-        };
-        requestWakeLock();
-        document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'visible' && wakeLock === null) {
-                requestWakeLock();
-            }
-        });
     }
 }
 
@@ -373,15 +339,15 @@ const ScrollManager = {
         };
         const scrollForward = () => {
             if (this.isPaused) return;
-            const duration = isHorizontal ? 20000 : (element.id === 'promotions-list' ? 2000 : 6000); 
+            const duration = isHorizontal ? 8000 : (element.id === 'promotions-list' ? 3000 : 5000); 
             const target = isHorizontal ? element.scrollWidth - element.clientWidth : element.scrollHeight - element.clientHeight;
             this.smoothScroll(element, target, duration, scrollBackward, isHorizontal);
         };
         const scrollBackward = () => {
             if (this.isPaused) return;
-            setTimeout(() => {
+            setTimeout(() => { // Pausa antes de voltar ao início
                 this.smoothScroll(element, 0, 2500, startCycle, isHorizontal);
-            }, 5000);
+            }, 3000); // Reduzido para 3s
         };
         instance.start = startCycle;
         this.instances.push(instance);

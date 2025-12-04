@@ -32,6 +32,7 @@ body {
     display: flex;
     flex-direction: column;
     height: 100vh;
+    animation: anti-sleep-pulse 10s infinite alternate; /* Impede a hibernação do navegador */
     overflow: hidden;
 }
 
@@ -281,6 +282,11 @@ body {
 
 .service-status-text.in-queue { color: var(--danger-red); }
 .service-status-text.completed { color: var(--success-green); }
+
+@keyframes anti-sleep-pulse {
+  from { opacity: 1; }
+  to   { opacity: 0.999; }
+}
 
 @keyframes pulse {
     0%, 100% { transform: scale(1); }

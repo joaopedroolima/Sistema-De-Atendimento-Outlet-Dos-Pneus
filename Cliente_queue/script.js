@@ -536,12 +536,6 @@ function showNextAd() {
         adContainer.appendChild(element);
         
         if (ad.type === 'video') {
-            // CORREÇÃO: A lógica de autoplay para webOS foi revertida.
-            // Esta é a versão correta que tenta com som e faz fallback para mudo.
-            // Isso foi movido de uma versão anterior para cá para unificar a correção.
-            video.muted = false;
-            video.volume = 1.0;
-
             handleVideoAd(element, ad);
         } else {
             handleImageAd(element, ad);
@@ -553,7 +547,7 @@ function showNextAd() {
 }
 
 function handleVideoAd(video, ad) {
-    // 1. Garante que o vídeo esteja configurado para autoplay em ambientes restritivos (como webOS)
+    // 1. Garante que o vídeo esteja configurado para autoplay em ambientes restritivos (como webOS)    
     video.loop = false; // Garante que o onended será chamado
     video.playsInline = true;
     video.currentTime = 0;
@@ -581,7 +575,6 @@ function handleVideoAd(video, ad) {
 
 function handleImageAd(img, ad) {
     let finalDuration = globalImageDuration;
-
     if (ad.duration) {
         const specificDuration = parseInt(ad.duration, 10);
         if (!isNaN(specificDuration) && specificDuration > 0) {
